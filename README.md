@@ -1,80 +1,163 @@
-# SketchMotion
+# ✎ SketchMotion
 
-Prompt (+ optional image) → a hand-drawn, sketch-style MP4. **LLM compiles the spec,
-Python renders it.** Gemini emits a Pydantic-validated `SceneSpec`; a deterministic PIL +
-ffmpeg engine draws the frames.
+Turn a **prompt, a picture, or a video** into a **hand-drawn sketch** — an animated video or
+a single still. You pick a few options; an **AI agent analyzes the request and routes it** to
+the right pipeline; a deterministic Python engine renders the output.
 
-See [`docs/specs/2026-06-11-sketchmotion-design.md`](docs/specs/2026-06-11-sketchmotion-design.md)
-for the design and [`docs/product-plan.md`](docs/product-plan.md) for the full roadmap
-(overlay mode, style learning, brand kits — deferred).
+> **Core principle: the LLM plans, Python draws.** The AI never renders pixels — it emits a
+> validated JSON scene plan (or a routing decision), and PIL + ffmpeg produce the result. That
+> separation makes output reproducible and the whole thing testable.
 
-## Run (Docker)
+- **Architecture:** [`ARCHITECTURE.md`](ARCHITECTURE.md)
+- **Project instructions (for AI coding agents):** [`CLAUDE.md`](CLAUDE.md)
+- **Design specs & roadmap:** [`docs/`](docs/)
+
+---
+
+## What it does
+
+One intake (`POST /create`), three routes the agent chooses between:
+
+| You give it | + option | → Route | Output |
+|---|---|---|---|
+| a prompt | — | **animate** | hand-drawn **video** |
+| a prompt + a picture | — | **animate** (picture as reference) | video |
+| a picture | "still" | **stylize_image** | sketched **still (PNG)** |
+| a video | — | **stylize_video** | sketched **video** (audio kept) |
+
+You select **mode** (auto / animate / stylize), **output** (auto / video / still), **sketch
+style** (auto / ink / pencil), and for animations a **duration** and **format** (16:9 / 9:16 /
+1:1). In `auto`, the agent reads your inputs and decides the route *and* a content-appropriate
+style, with a one-line reason.
+
+**Sketch styles:** **ink** (bold outlines + flattened color on paper — great for action) and
+**pencil** (graphite color-dodge — great for portraits).
+
+---
+
+## Quick start
+
+### Docker (everything)
 
 ```bash
-cp .env.example .env          # GEMINI_API_KEY can stay empty -> stub spec compiler
-docker compose up --build
-# UI:  http://localhost:8000
+cp .env.example .env          # GEMINI_API_KEY can stay empty
+docker compose up --build     # UI → http://localhost:8000
 ```
 
-## Run (local, no Docker)
+### Local (no Docker)
 
 ```bash
 uv sync
-# terminal 1 — Redis (or: docker run -p 6379:6379 redis:7-alpine)
-# terminal 2 — API:
-uv run uvicorn app.main:app --reload --port 8000
-# terminal 3 — worker:
-uv run arq worker.worker.WorkerSettings
+docker run -d --rm -p 6379:6379 redis:7-alpine     # any Redis works
+uv run uvicorn app.main:app --reload --port 8000   # API + UI
+uv run arq worker.worker.WorkerSettings            # worker (separate terminal)
 ```
 
-## Test
+Open http://localhost:8000, use the **Create** card, and watch it build.
+
+---
+
+## No API key required
+
+The "AI agent" is a pluggable provider — set with `LLM_PROVIDER`:
+
+| `LLM_PROVIDER` | Backend | Needs | When |
+|---|---|---|---|
+| `gemini` | google-genai | `GEMINI_API_KEY` | production |
+| `claude_cli` | your local `claude` CLI | Claude Code on PATH | dev — real prompt-aware specs, **no key** |
+| `stub` | deterministic templates | nothing | CI / offline |
+| `auto` *(default)* | gemini → claude_cli → stub | — | picks the best available |
+
+Going to production is one env var (`LLM_PROVIDER=gemini` + key) — **no code change**.
+
+---
+
+## CLI (no server needed)
 
 ```bash
-uv run pytest                 # Gemini mocked; no API key needed
-uv run pytest -m live         # opt-in: hits the real Gemini API (needs GEMINI_API_KEY)
+# Render a scene spec → MP4
+uv run python -m render.engine demo_spec.json out.mp4
+
+# Sketch a real video (audio preserved)
+uv run python -m worker.stylize in.mp4 out.mp4 --style ink      # or pencil
+uv run python -m worker.stylize in.mp4 out.mp4 --style pencil --seconds 12 --workers 8
 ```
 
-## Status
+---
 
-Building **Phases 1–5** (generate mode + static UI). Gemini runs behind mocks / a
-deterministic stub until a `GEMINI_API_KEY` is supplied — no code change to go live.
+## API
 
-| Phase | What | State |
+| Method | Path | Purpose |
 |---|---|---|
-| 1 | Skeleton: API, queue, worker, UI shell | ✅ |
-| 2 | Render library (primitives + engine, 11 scene types) | ✅ |
-| 3 | `SceneSpec` schema + validation | ✅ |
-| 4 | Gemini client (mocked) + stub compiler | ✅ |
-| 5 | Full pipeline + API wiring (verified live) | ✅ |
+| POST | `/create` | unified intake — options in, agent routes, returns `{job_id, route, output_kind, style}` |
+| POST | `/generate` | direct: prompt (+ image) → animated video |
+| POST | `/stylize` | direct: video → sketched video |
+| GET | `/jobs/{id}` | status `{status, progress_pct, route, output_kind, error?}` |
+| GET | `/jobs/{id}/video` · `/image` | the finished MP4 / PNG |
+| GET | `/jobs/{id}/spec` | the compiled `SceneSpec` (debug) |
+| GET | `/health` · `/` | liveness · web UI |
 
-**Generate mode is complete and runs end-to-end** (105 tests passing).
+---
 
-### Spec compiler is pluggable (`LLM_PROVIDER`)
+## How a request flows
 
-| Provider | When | Needs |
-|---|---|---|
-| `gemini` | production | `GEMINI_API_KEY` |
-| `claude_cli` | dev — real prompt-aware specs now | local `claude` CLI on PATH |
-| `stub` | CI / offline | nothing (deterministic templates) |
+```
+prompt / picture / video + options
+        │  POST /create
+        ▼
+  mode=auto ─▶ intake_job ─▶ 🧠 router agent (LLM)  ─(safe fallback to rules)
+        │                      → {route, style, output_kind} + reason
+        ▼  dispatch
+  animate · stylize_video · stylize_image     (each shaped by its SKILL)
+        ▼
+  /jobs/{id}/video   or   /jobs/{id}/image
+```
 
-`auto` (default) picks gemini if a key is set, else the local `claude` CLI, else stub.
-So on a dev box running Claude Code you get real prompt-aware compilation with **no API
-key**; production just sets `LLM_PROVIDER=gemini` + the key — no code change.
+- **animate**: refine → (vision on the image) → compile a validated `SceneSpec` → render.
+- **stylize**: extract frames → sketch each → re-encode with the original audio.
 
-### Phase 7 — Sketch a real video (built)
+Each pipeline has a **skill** (`skills/prompt-refiner`, `skills/video-stylist`) that guides
+the agent's decisions (scene archetypes & pacing; style choice & filter tuning).
 
-Turn real footage into a hand-drawn sketch — **no API key** (pure pixel filter).
+---
+
+## Scene vocabulary
+
+The animation engine draws from a fixed set of hand-drawn scene types (13): opening **hooks**,
+`title_writeon`, `boxes_popin`, `arrow_flow`, `object_hop`, `camera_pan`, `custom_sprite_path`,
+`celebration`, `end_card`, and sports scenes **`basketball_tip`** (shot → clank off the rim →
+tip-in → swish) and **`scoreboard`**. Every scene is validated against a strict schema (hook
+first, durations sum to target, safe-zone text) before a single frame is drawn.
+
+---
+
+## Testing
 
 ```bash
-uv run python -m worker.stylize in.mp4 out.mp4 --style ink     # or --style pencil
-# or in the browser: the "Sketch a real video" card -> POST /stylize
+uv run pytest                 # 153 tests — no network; ffmpeg-gated tests skip if ffmpeg absent
+uv run pytest -m claude_cli   # opt-in: real local claude CLI (set RUN_CLAUDE_CLI=1)
+uv run pytest -m live         # opt-in: real Gemini API (needs GEMINI_API_KEY)
 ```
 
-`render/sketch_filter.py` (ink = bold outlines + flat color on paper; pencil = graphite
-color-dodge), `worker/video_ingest.py` (ffprobe + frame extract), `worker/stylize.py`
-(frames → sketch → re-encode, **original audio preserved**, parallel `--workers`). The
-LLM half of overlay mode (detect key moments → composite arrows/callouts) is still
-deferred until a video-capable model key is configured — it will layer on these frames.
+The suite mocks the LLM at the provider boundary (no HTTP), guarantees every scene type has a
+renderer, checks render determinism, verifies the router's safe fallbacks, and confirms audio
+survives stylization.
 
-Deferred (see [`docs/product-plan.md`](docs/product-plan.md)): Phase 6 TTS/webhooks,
-7b overlay annotations (LLM), 8 style learning, 9 hardening, 10 brand kits/captions.
+---
+
+## Status & roadmap
+
+**Built:** generate (prompt → video), stylize (video/image → sketch), the unified `/create`
+intake, the LLM auto-router, per-pipeline skills, and still-image output.
+
+**Deferred** (see [`docs/product-plan.md`](docs/product-plan.md)): overlay-mode **annotations**
+(detect key moments → draw arrows/callouts on stylized footage), **style learning** (distill a
+user's old animations into a reusable style), brand kits, TTS narration, and **stylization
+performance** (in-memory ffmpeg pipe — currently the main bottleneck on long clips).
+
+## Notes
+
+- Stylizing long videos is currently slow (every frame is extracted to disk + filtered); short
+  clips are fine. Optimization is the top deferred item.
+- Downloaded source clips and full stylized outputs are git-ignored — keep third-party footage
+  local and respect its rights.
