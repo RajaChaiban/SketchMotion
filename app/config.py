@@ -33,6 +33,12 @@ class Settings(BaseSettings):
     # Limits
     max_prompt_chars: int = 2000
     max_upload_image_mb: int = 10
+    max_upload_video_mb: int = 200
+    max_video_seconds: int = 45        # cap stylization work per the overlay-mode design
+
+    @property
+    def max_upload_video_bytes(self) -> int:
+        return self.max_upload_video_mb * 1024 * 1024
 
     @property
     def max_upload_image_bytes(self) -> int:

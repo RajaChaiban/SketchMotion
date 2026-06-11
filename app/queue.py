@@ -53,6 +53,14 @@ class JobQueue:
         if mapping:
             await self._redis.hset(self._key(job_id), mapping=mapping)
 
+    async def enqueue_stylize(self, payload: dict, job_id: str | None = None) -> str:
+        job = await self._redis.enqueue_job("stylize_job", payload, _job_id=job_id)
+        resolved = job.job_id if job is not None else job_id
+        if resolved is None:
+            raise RuntimeError("failed to enqueue stylize job (duplicate job_id?)")
+        await self.set_status(resolved, status="queued", progress_pct=0)
+        return resolved
+
     async def set_spec(self, job_id: str, spec_json: str) -> None:
         await self._redis.hset(self._key(job_id), mapping={"spec": spec_json})
 

@@ -61,5 +61,20 @@ deterministic stub until a `GEMINI_API_KEY` is supplied — no code change to go
 So on a dev box running Claude Code you get real prompt-aware compilation with **no API
 key**; production just sets `LLM_PROVIDER=gemini` + the key — no code change.
 
+### Phase 7 — Sketch a real video (built)
+
+Turn real footage into a hand-drawn sketch — **no API key** (pure pixel filter).
+
+```bash
+uv run python -m worker.stylize in.mp4 out.mp4 --style ink     # or --style pencil
+# or in the browser: the "Sketch a real video" card -> POST /stylize
+```
+
+`render/sketch_filter.py` (ink = bold outlines + flat color on paper; pencil = graphite
+color-dodge), `worker/video_ingest.py` (ffprobe + frame extract), `worker/stylize.py`
+(frames → sketch → re-encode, **original audio preserved**, parallel `--workers`). The
+LLM half of overlay mode (detect key moments → composite arrows/callouts) is still
+deferred until a video-capable model key is configured — it will layer on these frames.
+
 Deferred (see [`docs/product-plan.md`](docs/product-plan.md)): Phase 6 TTS/webhooks,
-7 overlay mode, 8 style learning, 9 hardening, 10 brand kits/captions/marketing.
+7b overlay annotations (LLM), 8 style learning, 9 hardening, 10 brand kits/captions.

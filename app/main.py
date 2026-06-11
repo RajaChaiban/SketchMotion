@@ -136,6 +136,38 @@ async def generate(
     return GenerateResponse(job_id=job_id, status="queued")
 
 
+@app.post("/stylize", response_model=GenerateResponse)
+@limiter.limit("10/minute")
+async def stylize(
+    request: Request,
+    style: str = Form("ink"),
+    video: UploadFile = File(...),
+    settings: Settings = Depends(get_settings),
+    queue: JobQueue = Depends(get_queue),
+) -> GenerateResponse:
+    if style not in ("ink", "pencil"):
+        raise HTTPException(status_code=422, detail="style must be 'ink' or 'pencil'")
+    if not (video.content_type or "").startswith("video/"):
+        raise HTTPException(status_code=422, detail="uploaded file is not a video")
+    data = await video.read()
+    if not data:
+        raise HTTPException(status_code=422, detail="empty video upload")
+    if len(data) > settings.max_upload_video_bytes:
+        raise HTTPException(
+            status_code=422, detail=f"video exceeds {settings.max_upload_video_mb} MB"
+        )
+
+    job_id = uuid.uuid4().hex
+    dest = Path(settings.output_dir) / UPLOAD_SUBDIR / f"{job_id}_src"
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    async with aiofiles.open(dest, "wb") as fh:
+        await fh.write(data)
+
+    payload = {"job_id": job_id, "video_path": str(dest), "style": style}
+    await queue.enqueue_stylize(payload, job_id=job_id)
+    return GenerateResponse(job_id=job_id, status="queued")
+
+
 @app.get("/jobs/{job_id}", response_model=JobStatus)
 async def job_status(job_id: str, queue: JobQueue = Depends(get_queue)) -> JobStatus:
     data = await queue.get_status(job_id)

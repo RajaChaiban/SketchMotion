@@ -78,6 +78,28 @@
     <div class="bar" id="barwrap" style="display:none"><i id="bar"></i></div>
     <video id="player" controls style="display:none"></video>
   </div>
+
+  <div class="card">
+    <h1 style="font-size:1.4rem;margin:0 0 4px">🎞️ Sketch a real video</h1>
+    <p class="tag" style="margin:0 0 12px">Upload footage — the players become a hand-drawn sketch.</p>
+    <div class="row">
+      <div>
+        <label for="svideo">Video file</label>
+        <input type="file" id="svideo" accept="video/*" />
+      </div>
+      <div>
+        <label for="sstyle">Look</label>
+        <select id="sstyle">
+          <option value="ink">Ink + flat color</option>
+          <option value="pencil">Pencil (B/W)</option>
+        </select>
+      </div>
+    </div>
+    <button id="sgo">Sketch the video →</button>
+    <div id="sstatus"></div>
+    <div class="bar" id="sbarwrap" style="display:none"><i id="sbar"></i></div>
+    <video id="splayer" controls style="display:none"></video>
+  </div>
 </div>
 
 <script>
@@ -137,6 +159,57 @@ $("go").addEventListener("click", async () => {
   } catch (e) {
     $("status").innerHTML = `<span class="err">${e.message}</span>`;
     $("go").disabled = false;
+  }
+});
+
+// --- Sketch a real video ---
+let spolling = null;
+async function spoll(jobId) {
+  try {
+    const r = await fetch(`/jobs/${jobId}`);
+    if (!r.ok) throw new Error(`status ${r.status}`);
+    const j = await r.json();
+    $("sstatus").textContent = `Status: ${j.status} (${j.progress_pct}%)`;
+    $("sbar").style.width = `${j.progress_pct}%`;
+    if (j.status === "done") {
+      clearInterval(spolling);
+      const v = $("splayer");
+      v.src = `/jobs/${jobId}/video`;
+      v.style.display = "block";
+      $("sgo").disabled = false;
+    } else if (j.status === "failed") {
+      clearInterval(spolling);
+      $("sstatus").innerHTML = `<span class="err">Failed: ${j.error || "unknown error"}</span>`;
+      $("sgo").disabled = false;
+    }
+  } catch (e) {
+    clearInterval(spolling);
+    $("sstatus").innerHTML = `<span class="err">Lost connection: ${e.message}</span>`;
+    $("sgo").disabled = false;
+  }
+}
+
+$("sgo").addEventListener("click", async () => {
+  const file = $("svideo").files[0];
+  if (!file) { $("sstatus").innerHTML = `<span class="err">Choose a video first.</span>`; return; }
+  $("sgo").disabled = true;
+  $("splayer").style.display = "none";
+  $("sbarwrap").style.display = "block";
+  $("sbar").style.width = "0%";
+  $("sstatus").textContent = "Uploading…";
+
+  const fd = new FormData();
+  fd.append("style", $("sstyle").value);
+  fd.append("video", file);
+  try {
+    const r = await fetch("/stylize", { method: "POST", body: fd });
+    const j = await r.json();
+    if (!r.ok) throw new Error(j.detail || `status ${r.status}`);
+    $("sstatus").textContent = "Queued…";
+    spolling = setInterval(() => spoll(j.job_id), 1500);
+  } catch (e) {
+    $("sstatus").innerHTML = `<span class="err">${e.message}</span>`;
+    $("sgo").disabled = false;
   }
 });
 </script>

@@ -94,3 +94,26 @@ async def test_job_status_404(client):
 async def test_video_404_before_render(client):
     r = await client.get("/jobs/whatever/video")
     assert r.status_code == 404
+
+
+async def test_stylize_enqueues(client, fake_queue):
+    files = {"video": ("clip.mp4", io.BytesIO(b"\x00\x00\x00\x18ftypmp42" + b"0" * 128), "video/mp4")}
+    r = await client.post("/stylize", data={"style": "ink"}, files=files)
+    assert r.status_code == 200
+    assert r.json()["status"] == "queued"
+    assert fake_queue.enqueued[0]["style"] == "ink"
+    assert fake_queue.enqueued[0]["video_path"].endswith("_src")
+
+
+async def test_stylize_rejects_bad_style(client):
+    files = {"video": ("clip.mp4", io.BytesIO(b"data"), "video/mp4")}
+    r = await client.post("/stylize", data={"style": "watercolor"}, files=files)
+    assert r.status_code == 422
+    assert "style" in r.json()["detail"]
+
+
+async def test_stylize_rejects_non_video(client):
+    files = {"video": ("notes.txt", io.BytesIO(b"hello"), "text/plain")}
+    r = await client.post("/stylize", data={"style": "ink"}, files=files)
+    assert r.status_code == 422
+    assert "video" in r.json()["detail"]
