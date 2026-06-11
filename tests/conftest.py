@@ -37,6 +37,12 @@ class FakeQueue:
         self.jobs[jid] = {"status": "queued", "progress_pct": 0}
         return jid
 
+    async def enqueue(self, function: str, payload: dict, job_id: str | None = None) -> str:
+        jid = job_id or f"job{len(self.enqueued)}"
+        self.enqueued.append({"function": function, **payload})
+        self.jobs[jid] = {"status": "queued", "progress_pct": 0}
+        return jid
+
     async def set_spec(self, job_id, spec_json: str):
         self.jobs.setdefault(job_id, {})["spec"] = spec_json
 

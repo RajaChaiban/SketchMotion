@@ -18,9 +18,12 @@ from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
 
+import filetype
+
 from app.config import Settings, get_settings
-from app.models import GenerateResponse, JobStatus
+from app.models import CreateResponse, GenerateResponse, JobStatus
 from app.queue import JobQueue, create_queue
+from worker.intake import route as intake_route
 
 STATIC_DIR = Path(__file__).parent / "static"
 UPLOAD_SUBDIR = "uploads"
@@ -168,6 +171,91 @@ async def stylize(
     return GenerateResponse(job_id=job_id, status="queued")
 
 
+def _sniff_kind(data: bytes, content_type: str | None) -> str | None:
+    ct = content_type or ""
+    if ct.startswith("image/"):
+        return "image"
+    if ct.startswith("video/"):
+        return "video"
+    guess = filetype.guess(data[:512])
+    if guess is not None:
+        if guess.mime.startswith("image/"):
+            return "image"
+        if guess.mime.startswith("video/"):
+            return "video"
+    return None
+
+
+@app.post("/create", response_model=CreateResponse)
+@limiter.limit("20/minute")
+async def create(
+    request: Request,
+    prompt: str = Form(""),
+    mode: str = Form("auto"),
+    output_kind: str | None = Form(None),
+    style: str = Form("auto"),
+    duration_s: int = Form(15),
+    aspect: str = Form("16:9"),
+    captions: bool = Form(True),
+    file: UploadFile | None = File(None),
+    settings: Settings = Depends(get_settings),
+    queue: JobQueue = Depends(get_queue),
+) -> CreateResponse:
+    """Unified intake: user picks options up front; we analyze + route to a pipeline."""
+    file_kind: str | None = None
+    data: bytes | None = None
+    if file is not None and file.filename:
+        data = await file.read()
+        file_kind = _sniff_kind(data, file.content_type)
+        if file_kind is None:
+            raise HTTPException(status_code=422, detail="file must be an image or a video")
+        if file_kind == "image" and len(data) > settings.max_upload_image_bytes:
+            raise HTTPException(status_code=422, detail=f"image exceeds {settings.max_upload_image_mb} MB")
+        if file_kind == "video" and len(data) > settings.max_upload_video_bytes:
+            raise HTTPException(status_code=422, detail=f"video exceeds {settings.max_upload_video_mb} MB")
+
+    try:
+        plan = intake_route(prompt=prompt, file_kind=file_kind, mode=mode,
+                            output_kind=output_kind, style=style)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+
+    if plan.needs_prompt and not prompt.strip():
+        raise HTTPException(status_code=422, detail="this route needs a prompt")
+    if len(prompt) > settings.max_prompt_chars:
+        raise HTTPException(status_code=422, detail=f"prompt exceeds {settings.max_prompt_chars} chars")
+    if plan.job_function == "generate_job" and not 5 <= duration_s <= 60:
+        raise HTTPException(status_code=422, detail="duration_s must be 5..60")
+
+    job_id = uuid.uuid4().hex
+    upload_dir = Path(settings.output_dir) / UPLOAD_SUBDIR
+    upload_dir.mkdir(parents=True, exist_ok=True)
+    image_path: str | None = None
+    video_path: str | None = None
+    if data is not None and file_kind == "image":
+        image_path = str(upload_dir / f"{job_id}.img")
+        async with aiofiles.open(image_path, "wb") as fh:
+            await fh.write(data)
+    elif data is not None and file_kind == "video":
+        video_path = str(upload_dir / f"{job_id}_src")
+        async with aiofiles.open(video_path, "wb") as fh:
+            await fh.write(data)
+
+    payload: dict = {"job_id": job_id}
+    if plan.job_function == "generate_job":
+        payload.update(prompt=prompt.strip(), duration_s=duration_s, aspect=aspect,
+                       captions=captions, draft=False,
+                       image_path=image_path, image_mime=(file.content_type if file else None))
+    elif plan.job_function == "stylize_job":
+        payload.update(video_path=video_path, style=plan.style)
+    else:  # stylize_image_job
+        payload.update(image_path=image_path, style=plan.style)
+
+    await queue.enqueue(plan.job_function, payload, job_id)
+    return CreateResponse(job_id=job_id, status="queued", route=plan.route,
+                          output_kind=plan.output_kind, style=plan.style)
+
+
 @app.get("/jobs/{job_id}", response_model=JobStatus)
 async def job_status(job_id: str, queue: JobQueue = Depends(get_queue)) -> JobStatus:
     data = await queue.get_status(job_id)
@@ -187,6 +275,14 @@ async def job_video(job_id: str, settings: Settings = Depends(get_settings)) -> 
     if not path.exists():
         raise HTTPException(status_code=404, detail="video not ready")
     return FileResponse(path, media_type="video/mp4", filename=f"{job_id}.mp4")
+
+
+@app.get("/jobs/{job_id}/image")
+async def job_image(job_id: str, settings: Settings = Depends(get_settings)) -> FileResponse:
+    path = Path(settings.output_dir) / f"{job_id}.png"
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="image not ready")
+    return FileResponse(path, media_type="image/png", filename=f"{job_id}.png")
 
 
 @app.get("/jobs/{job_id}/spec")

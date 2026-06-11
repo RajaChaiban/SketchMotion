@@ -71,6 +71,23 @@ def test_stylize_preserves_audio(tmp_path):
     assert _has_audio_stream(out)
 
 
+@pytest.mark.parametrize("style", ["ink", "pencil"])
+def test_stylize_image_writes_png(tmp_path, style):
+    import numpy as np
+    from PIL import Image
+
+    from worker.skills import style_opts
+    from worker.stylize import stylize_image
+
+    src = tmp_path / "in.png"
+    xx, yy = np.meshgrid(np.linspace(0, 255, 80), np.linspace(0, 255, 60))
+    Image.fromarray(np.stack([xx, yy, (xx + yy) / 2], -1).astype("uint8"), "RGB").save(src)
+    out = tmp_path / "out.png"
+    stylize_image(src, out, style=style, opts=style_opts(style))
+    assert out.exists()
+    assert Image.open(out).size == (80, 60)
+
+
 def test_stylize_reports_progress(tmp_path):
     src = tmp_path / "in.mp4"
     _make_video(src, with_audio=False, dur=1, rate=8)

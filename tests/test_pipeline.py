@@ -67,7 +67,7 @@ class _FakeProvider:
         self.vision_called = True
         return ImageBrief(subject="rocket", suggested_sprites=["rocket"])
 
-    def compile_spec(self, *, refined_prompt, target_duration_s, aspect, image_brief):
+    def compile_spec(self, *, refined_prompt, target_duration_s, aspect, image_brief, skill=""):
         # exercise the vision-fed compile branch deterministically
         assert image_brief is not None and image_brief.subject == "rocket"
         return stub_compile(refined_prompt, target_duration_s, aspect)

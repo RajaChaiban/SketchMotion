@@ -117,3 +117,53 @@ async def test_stylize_rejects_non_video(client):
     r = await client.post("/stylize", data={"style": "ink"}, files=files)
     assert r.status_code == 422
     assert "video" in r.json()["detail"]
+
+
+# --- unified /create intake ---
+
+async def test_create_prompt_routes_to_animate(client, fake_queue):
+    r = await client.post("/create", data={"prompt": "celebrate a launch", "duration_s": "15"})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["route"] == "animate" and body["output_kind"] == "video"
+    assert fake_queue.enqueued[0]["function"] == "generate_job"
+    assert fake_queue.enqueued[0]["prompt"] == "celebrate a launch"
+
+
+async def test_create_image_routes_to_still(client, fake_queue):
+    files = {"file": ("photo.png", io.BytesIO(b"\x89PNG\r\n\x1a\n" + b"0" * 64), "image/png")}
+    r = await client.post("/create", data={"style": "pencil"}, files=files)
+    assert r.status_code == 200
+    body = r.json()
+    assert body["route"] == "stylize_image" and body["output_kind"] == "still"
+    assert body["style"] == "pencil"
+    assert fake_queue.enqueued[0]["function"] == "stylize_image_job"
+    assert fake_queue.enqueued[0]["image_path"].endswith(".img")
+
+
+async def test_create_video_routes_to_stylize(client, fake_queue):
+    files = {"file": ("clip.mp4", io.BytesIO(b"\x00\x00\x00\x18ftypmp42" + b"0" * 64), "video/mp4")}
+    r = await client.post("/create", data={"style": "ink"}, files=files)
+    assert r.status_code == 200
+    assert r.json()["route"] == "stylize_video"
+    assert fake_queue.enqueued[0]["function"] == "stylize_job"
+
+
+async def test_create_image_plus_prompt_animates(client, fake_queue):
+    files = {"file": ("logo.png", io.BytesIO(b"\x89PNG\r\n\x1a\n" + b"0" * 64), "image/png")}
+    r = await client.post("/create", data={"prompt": "logo reveal", "duration_s": "12"}, files=files)
+    assert r.status_code == 200
+    assert r.json()["route"] == "animate"
+    assert fake_queue.enqueued[0]["function"] == "generate_job"
+    assert fake_queue.enqueued[0]["image_path"] is not None
+
+
+async def test_create_requires_some_input(client):
+    r = await client.post("/create", data={"prompt": "   "})
+    assert r.status_code == 422
+
+
+async def test_create_rejects_bad_file(client):
+    files = {"file": ("notes.txt", io.BytesIO(b"hello there"), "text/plain")}
+    r = await client.post("/create", data={"prompt": ""}, files=files)
+    assert r.status_code == 422

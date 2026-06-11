@@ -15,6 +15,14 @@ class GenerateResponse(BaseModel):
     status: JobState = "queued"
 
 
+class CreateResponse(BaseModel):
+    job_id: str
+    status: JobState = "queued"
+    route: str            # animate | stylize_video | stylize_image
+    output_kind: str      # video | still
+    style: str
+
+
 class JobStatus(BaseModel):
     job_id: str
     status: JobState

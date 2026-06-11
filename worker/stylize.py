@@ -89,6 +89,17 @@ def stylize_video(
     return str(output_path)
 
 
+def stylize_image(input_path: str | Path, output_path: str | Path, *,
+                  style: str = "ink", opts: dict | None = None) -> str:
+    """Sketch a single image to a PNG (the 'just a sketch' / still output)."""
+    img = Image.open(input_path)
+    out = sketchify(img, style=style, **(opts or {})).convert("RGB")
+    out_path = Path(output_path)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    out.save(out_path)
+    return str(out_path)
+
+
 def main(argv: list[str]) -> int:
     ap = argparse.ArgumentParser(description="Turn a real video into a hand-drawn sketch.")
     ap.add_argument("input")

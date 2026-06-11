@@ -39,7 +39,8 @@ class LLMProvider(Protocol):
     supports_vision: bool
 
     def compile_spec(self, *, refined_prompt: str, target_duration_s: float,
-                     aspect: str = "16:9", image_brief: ImageBrief | None = None) -> SceneSpec: ...
+                     aspect: str = "16:9", image_brief: ImageBrief | None = None,
+                     skill: str = "") -> SceneSpec: ...
 
     def vision(self, image_bytes: bytes, mime: str) -> ImageBrief | None: ...
 
@@ -90,7 +91,7 @@ class StubProvider:
     name = "stub"
     supports_vision = False
 
-    def compile_spec(self, *, refined_prompt, target_duration_s, aspect="16:9", image_brief=None):
+    def compile_spec(self, *, refined_prompt, target_duration_s, aspect="16:9", image_brief=None, skill=""):
         return stub_compile(refined_prompt, target_duration_s, aspect)
 
     def vision(self, image_bytes, mime):
@@ -104,12 +105,13 @@ class GeminiProvider:
     def __init__(self, settings: Settings, client=None) -> None:
         self.client = GeminiClient(settings, client=client)
 
-    def compile_spec(self, *, refined_prompt, target_duration_s, aspect="16:9", image_brief=None):
+    def compile_spec(self, *, refined_prompt, target_duration_s, aspect="16:9", image_brief=None, skill=""):
         return self.client.compile_spec(
             refined_prompt=refined_prompt,
             target_duration_s=target_duration_s,
             aspect=aspect,
             image_brief=image_brief,
+            skill=skill,
         )
 
     def vision(self, image_bytes, mime):
@@ -153,8 +155,8 @@ class ClaudeCliProvider:
         )
         return envelope.get("result", "")
 
-    def compile_spec(self, *, refined_prompt, target_duration_s, aspect="16:9", image_brief=None):
-        base = _build_compile_prompt(refined_prompt, image_brief, target_duration_s, aspect)
+    def compile_spec(self, *, refined_prompt, target_duration_s, aspect="16:9", image_brief=None, skill=""):
+        base = _build_compile_prompt(refined_prompt, image_brief, target_duration_s, aspect, skill)
         base += "\n\nIMPORTANT: respond with ONLY the JSON object — no prose, no markdown fences."
         return compile_with_retry(self._run_cli, base, target_duration_s, label="claude_cli")
 

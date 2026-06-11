@@ -77,8 +77,9 @@ VISION_INSTRUCTION = (
 
 
 def _build_compile_prompt(refined_prompt: str, image_brief: ImageBrief | None,
-                          target_duration_s: float, aspect: str) -> str:
+                          target_duration_s: float, aspect: str, skill: str = "") -> str:
     brief_json = image_brief.model_dump_json() if image_brief else "null"
+    skill_block = f"\n## Director's skill (follow this)\n{skill}\n" if skill else ""
     return f"""You are a motion-graphics director. Compile the request into a SceneSpec JSON
 for a hand-drawn sketch animation. Output ONLY JSON.
 
@@ -90,7 +91,7 @@ Rules:
 - Set "title", "fps" (24 or 30), "aspect"="{aspect}", "total_duration_s", and "scenes".
 - Each scene may include an optional "caption" (short, for muted autoplay).
 - Use plain ASCII in all text/labels/captions — no arrows (→ ↑), bullets, or smart quotes; write "to" or "->".
-{PRIMITIVE_CATALOG}
+{PRIMITIVE_CATALOG}{skill_block}
 User prompt: {refined_prompt!r}
 Image brief (may be null): {brief_json}
 """
@@ -161,8 +162,9 @@ class GeminiClient:
         target_duration_s: float,
         aspect: str = "16:9",
         image_brief: ImageBrief | None = None,
+        skill: str = "",
     ) -> SceneSpec:
-        base = _build_compile_prompt(refined_prompt, image_brief, target_duration_s, aspect)
+        base = _build_compile_prompt(refined_prompt, image_brief, target_duration_s, aspect, skill)
         primary = self.settings.gemini_spec_model
         fallback = self.settings.gemini_spec_model_fallback
         # 2 retries on the primary, then escalate to the fallback pro model.

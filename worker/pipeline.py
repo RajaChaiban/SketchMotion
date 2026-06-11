@@ -18,6 +18,7 @@ from render.engine import render_spec
 from worker.gemini_client import ImageBrief
 from worker.llm import LLMProvider, get_provider
 from worker.refine import ContentRejected, refine
+from worker.skills import load_skill
 
 log = logging.getLogger("sketchmotion.pipeline")
 
@@ -54,12 +55,14 @@ async def run_generate(
 
         # Step 3 — spec compilation (provider-specific; runs off the event loop)
         await queue.set_status(job_id, status="compiling", progress_pct=40)
+        skill = load_skill("prompt-refiner")
         spec = await asyncio.to_thread(
             lambda: provider.compile_spec(
                 refined_prompt=refined.prompt,
                 target_duration_s=duration,
                 aspect=aspect,
                 image_brief=image_brief,
+                skill=skill,
             )
         )
         await queue.set_spec(job_id, spec.model_dump_json())
