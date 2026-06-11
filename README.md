@@ -42,7 +42,14 @@ deterministic stub until a `GEMINI_API_KEY` is supplied — no code change to go
 | Phase | What | State |
 |---|---|---|
 | 1 | Skeleton: API, queue, worker, UI shell | ✅ |
-| 2 | Render library (primitives + engine) | ⏳ |
-| 3 | `SceneSpec` schema + validation | ⏳ |
-| 4 | Gemini client (mocked) | ⏳ |
-| 5 | Full pipeline + API wiring | ⏳ |
+| 2 | Render library (primitives + engine, 11 scene types) | ✅ |
+| 3 | `SceneSpec` schema + validation | ✅ |
+| 4 | Gemini client (mocked) + stub compiler | ✅ |
+| 5 | Full pipeline + API wiring (verified live) | ✅ |
+
+**Generate mode is complete and runs end-to-end** (94 tests passing). With no
+`GEMINI_API_KEY`, the deterministic stub compiler produces real MP4s today; add a key to
+switch to live Gemini spec compilation — no code change.
+
+Deferred (see [`docs/product-plan.md`](docs/product-plan.md)): Phase 6 TTS/webhooks,
+7 overlay mode, 8 style learning, 9 hardening, 10 brand kits/captions/marketing.
