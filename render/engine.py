@@ -269,6 +269,103 @@ def _h_custom_sprite_path(f: Frame) -> None:
     P.sprite(f.draw, name, (x - sz / 2, y - sz / 2, x + sz / 2, y + sz / 2), accent(0, f.palette), f.rng)
 
 
+def _bezier(p0, p1, p2, u):
+    u = P.clamp01(u)
+    x = (1 - u) ** 2 * p0[0] + 2 * (1 - u) * u * p1[0] + u * u * p2[0]
+    y = (1 - u) ** 2 * p0[1] + 2 * (1 - u) * u * p1[1] + u * u * p2[1]
+    return (x, y)
+
+
+def _lerp(a, b, u):
+    u = P.clamp01(u)
+    return (a[0] + (b[0] - a[0]) * u, a[1] + (b[1] - a[1]) * u)
+
+
+def _h_basketball_tip(f: Frame) -> None:
+    """Animates a missed shot tipped in: arc -> clank off rim -> tipper leaps -> swish."""
+    w, h = f.size
+    t = f.t
+    floor = h * 0.84
+    P.sketch_line(f.draw, (w * 0.05, floor), (w * 0.95, floor), INK, 3, f.rng, 2.0)
+
+    rim_w = min(w, h) * 0.17
+    rim_center = (w * 0.74, h * 0.36)
+    geo = P.hoop(f.draw, rim_center, rim_w, INK, accent(0, f.palette), f.rng)
+
+    fig_h = h * 0.27
+    fig_w = fig_h * 0.5
+    # shooter (left), arms up after release
+    sx = w * 0.16
+    P.stick_figure(f.draw, (sx, floor - fig_h, sx + fig_w, floor), accent(1, f.palette), f.rng, arms="up")
+    sh_label = f.params.get("shooter")
+    if sh_label:
+        draw_label(f.draw, str(sh_label), (sx + fig_w / 2, floor + h * 0.05), fig_w * 2.2, h * 0.05, h * 0.035)
+
+    # tipper near the rim, leaps during the tip window
+    tx = rim_center[0] - rim_w * 1.5
+    jump = 0.0
+    if t > 0.45:
+        up = P.ease_out_cubic(min(1, (t - 0.45) / 0.22))
+        down = P.ease_in_out(min(1, (t - 0.72) / 0.28)) if t > 0.72 else 0.0
+        jump = h * 0.16 * (up - down)
+    P.stick_figure(f.draw, (tx, floor - fig_h - jump, tx + fig_w, floor - jump),
+                   accent(3, f.palette), f.rng, arms="reach")
+    tip_label = f.params.get("tipper")
+    if tip_label:
+        draw_label(f.draw, str(tip_label), (tx + fig_w / 2, floor + h * 0.05), fig_w * 2.6, h * 0.05, h * 0.035)
+
+    # key ball positions
+    hands = (sx + fig_w, floor - fig_h * 0.95)
+    apex = (w * 0.44, h * 0.10)
+    rim_front = (rim_center[0] - rim_w * 0.5, rim_center[1] - rim_w * 0.12)
+    tip_pt = (rim_center[0] - rim_w * 0.75, rim_center[1] - rim_w * 0.55)
+    through = (rim_center[0] - rim_w * 0.05, rim_center[1] + rim_w * 0.05)
+    made = (rim_center[0] - rim_w * 0.05, geo["net_bottom"])
+
+    if t <= 0.4:
+        pos = _bezier(hands, apex, rim_front, t / 0.4)
+    elif t <= 0.5:
+        pos = _lerp(rim_front, (rim_front[0] - rim_w * 0.1, rim_front[1] - rim_w * 0.2), (t - 0.4) / 0.1)
+    elif t <= 0.66:
+        pos = _lerp(rim_front, tip_pt, P.ease_out_cubic((t - 0.5) / 0.16))
+    else:
+        pos = _bezier(tip_pt, through, made, (t - 0.66) / 0.34)
+
+    ball_r = min(w, h) * 0.038
+    # clank spark at the rim during the miss
+    if 0.38 <= t <= 0.52:
+        cx, cy = rim_front
+        for ang in range(0, 360, 60):
+            a = math.radians(ang)
+            P.sketch_line(f.draw, (cx, cy), (cx + rim_w * 0.3 * math.cos(a), cy + rim_w * 0.3 * math.sin(a)),
+                          accent(2, f.palette), 3, f.rng, 1.0)
+    P.basketball(f.draw, pos, ball_r, accent(0, f.palette), f.rng)
+
+
+def _h_scoreboard(f: Frame) -> None:
+    w, h = f.size
+    away = str(f.params.get("away", "AWAY"))
+    home = str(f.params.get("home", "HOME"))
+    a_score = f.params.get("away_score", 0)
+    h_score = f.params.get("home_score", 0)
+    clock = str(f.params.get("clock", "0:00"))
+    appear = P.ease_out_back(min(1, f.t / 0.4))
+    if appear <= 0.05:
+        return
+    bw = w * 0.74 * appear
+    bh = h * 0.34 * appear
+    cx, cy = w / 2, h * 0.42
+    box = (cx - bw / 2, cy - bh / 2, cx + bw / 2, cy + bh / 2)
+    P.sketch_rect(f.draw, box, INK, 5, f.rng, 2.5)
+    if appear > 0.85:
+        P.sketch_line(f.draw, (cx, cy - bh * 0.32), (cx, cy + bh * 0.18), INK, 3, f.rng, 1.5)
+        draw_label(f.draw, away, (cx - bw * 0.26, cy - bh * 0.18), bw * 0.4, bh * 0.2, h * 0.05, accent(1, f.palette))
+        draw_label(f.draw, home, (cx + bw * 0.26, cy - bh * 0.18), bw * 0.4, bh * 0.2, h * 0.05, accent(3, f.palette))
+        draw_label(f.draw, str(a_score), (cx - bw * 0.26, cy + bh * 0.02), bw * 0.4, bh * 0.22, h * 0.12)
+        draw_label(f.draw, str(h_score), (cx + bw * 0.26, cy + bh * 0.02), bw * 0.4, bh * 0.22, h * 0.12)
+        draw_label(f.draw, clock, (cx, cy + bh * 0.34), bw * 0.5, bh * 0.16, h * 0.05, accent(0, f.palette))
+
+
 SCENE_HANDLERS: dict[str, Callable[[Frame], None]] = {
     "hook_claim": _h_text,
     "hook_question": _h_text,
@@ -281,6 +378,8 @@ SCENE_HANDLERS: dict[str, Callable[[Frame], None]] = {
     "end_card": _h_end_card,
     "camera_pan": _h_camera_pan,
     "custom_sprite_path": _h_custom_sprite_path,
+    "basketball_tip": _h_basketball_tip,
+    "scoreboard": _h_scoreboard,
 }
 
 

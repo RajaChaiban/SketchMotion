@@ -20,6 +20,7 @@ SceneType = Literal[
     "title_writeon", "boxes_popin", "object_hop",
     "arrow_flow", "celebration", "end_card",
     "camera_pan", "custom_sprite_path",
+    "basketball_tip", "scoreboard",
 ]
 
 HOOK_TYPES: frozenset[str] = frozenset({"hook_claim", "hook_question", "pattern_interrupt"})
@@ -75,6 +76,19 @@ class CustomSpriteParams(BaseModel):
         return self
 
 
+class BasketballTipParams(BaseModel):
+    shooter: str | None = Field(default=None, max_length=40)
+    tipper: str | None = Field(default=None, max_length=40)
+
+
+class ScoreboardParams(BaseModel):
+    away: str = Field(default="AWAY", max_length=12)
+    home: str = Field(default="HOME", max_length=12)
+    away_score: int = Field(default=0, ge=0, le=300)
+    home_score: int = Field(default=0, ge=0, le=300)
+    clock: str = Field(default="0:00", max_length=10)
+
+
 PARAM_MODELS: dict[str, type[BaseModel]] = {
     "hook_claim": TextParams,
     "hook_question": TextParams,
@@ -87,6 +101,8 @@ PARAM_MODELS: dict[str, type[BaseModel]] = {
     "end_card": EndCardParams,
     "camera_pan": CameraPanParams,
     "custom_sprite_path": CustomSpriteParams,
+    "basketball_tip": BasketballTipParams,
+    "scoreboard": ScoreboardParams,
 }
 
 

@@ -264,7 +264,59 @@ def _sprite_heart(draw, box, color, r, width=4):
     _poly(draw, pts, color, width, r, 1.0)
 
 
-def stick_figure(draw, box, color, r=None, width=4):
+def basketball(draw, center, radius, color="#e8763a", r=None, width=4):
+    """A hand-drawn basketball: circle + seams."""
+    r = r if r is not None else rng(0)
+    cx, cy = center
+    sketch_ellipse(draw, (cx - radius, cy - radius, cx + radius, cy + radius), color, width, r, 1.0)
+    seam = max(2, width - 1)
+    sketch_line(draw, (cx, cy - radius), (cx, cy + radius), color, seam, r, 0.8)
+    sketch_line(draw, (cx - radius, cy), (cx + radius, cy), color, seam, r, 0.8)
+    # two curved seams (left/right) approximated with jittered arcs
+    n = 14
+    for sign in (-1, 1):
+        pts = []
+        for i in range(n):
+            a = -math.pi / 2 + math.pi * i / (n - 1)
+            pts.append((cx + sign * radius * 0.55 * math.cos(a), cy + radius * math.sin(a)))
+        pts = jitter_points(pts, 0.6, r)
+        draw.line(pts, fill=color, width=seam, joint="curve")
+
+
+def hoop(draw, rim_center, rim_w, color="#1e1e1e", rim_color="#e8763a", r=None, width=4):
+    """Backboard (right) + rim ellipse (facing left) + a hanging net, around `rim_center`."""
+    r = r if r is not None else rng(0)
+    cx, cy = rim_center
+    rim_h = rim_w * 0.34
+    # backboard: vertical board just behind (right of) the rim
+    bb_x = cx + rim_w * 0.45
+    bb_w = rim_w * 0.18
+    bb_h = rim_w * 1.1
+    sketch_rect(draw, (bb_x, cy - bb_h * 0.75, bb_x + bb_w, cy + bb_h * 0.25), color, width, r, 1.2)
+    sketch_rect(draw, (bb_x, cy - bb_h * 0.4, bb_x + bb_w, cy + bb_h * 0.05),
+                color, max(2, width - 1), r, 0.8)
+    # rim
+    rim_box = (cx - rim_w / 2, cy - rim_h / 2, cx + rim_w / 2, cy + rim_h / 2)
+    sketch_ellipse(draw, rim_box, rim_color, width, r, 0.8)
+    # net: lines from around the rim converging to a narrower bottom
+    netd = rim_w * 0.85
+    bottom = cy + netd
+    top_pts = [(cx + rim_w * 0.5 * math.cos(a), cy + rim_h * 0.5 * math.sin(a))
+               for a in [math.radians(d) for d in (200, 245, 290, 335, 20)]]
+    bot_w = rim_w * 0.28
+    bot_pts = [(cx - bot_w / 2 + bot_w * k, bottom) for k in (0, 0.33, 0.66, 1.0)]
+    for tp in top_pts:
+        bx = cx + (tp[0] - cx) * 0.35
+        sketch_line(draw, tp, (bx, bottom), color, max(2, width - 2), r, 0.8)
+    for frac in (0.45, 0.8):
+        yy = cy + rim_h * 0.3 + netd * frac
+        sketch_line(draw, (cx - rim_w * 0.42 * (1 - frac), yy),
+                    (cx + rim_w * 0.42 * (1 - frac), yy), color, max(2, width - 2), r, 0.8)
+    return {"rim_center": (cx, cy), "rim_w": rim_w, "net_bottom": bottom}
+
+
+def stick_figure(draw, box, color, r=None, width=4, arms="side"):
+    """A hand-drawn stick figure. `arms`: 'side' | 'up' (both raised) | 'reach' (right arm up)."""
     r = r if r is not None else rng(0)
     x0, y0, x1, y1 = box
     cx = (x0 + x1) / 2
@@ -272,9 +324,17 @@ def stick_figure(draw, box, color, r=None, width=4):
     sketch_ellipse(draw, (cx - head_r, y0, cx + head_r, y0 + 2 * head_r), color, width, r, 1.0)
     neck = y0 + 2 * head_r
     hip = y0 + (y1 - y0) * 0.62
+    shoulder = neck + (hip - neck) * 0.15
     sketch_line(draw, (cx, neck), (cx, hip), color, width, r, 1.0)
-    sketch_line(draw, (cx, neck + (hip - neck) * 0.15), (x0, neck + (hip - neck) * 0.5), color, width, r, 1.0)
-    sketch_line(draw, (cx, neck + (hip - neck) * 0.15), (x1, neck + (hip - neck) * 0.5), color, width, r, 1.0)
+    if arms == "up":
+        sketch_line(draw, (cx, shoulder), (x0 + (x1 - x0) * 0.2, y0 - head_r * 1.2), color, width, r, 1.0)
+        sketch_line(draw, (cx, shoulder), (x1 - (x1 - x0) * 0.2, y0 - head_r * 1.2), color, width, r, 1.0)
+    elif arms == "reach":
+        sketch_line(draw, (cx, shoulder), (x0, neck + (hip - neck) * 0.5), color, width, r, 1.0)
+        sketch_line(draw, (cx, shoulder), (x1 + (x1 - x0) * 0.15, y0 - head_r * 1.6), color, width, r, 1.0)
+    else:  # side
+        sketch_line(draw, (cx, shoulder), (x0, neck + (hip - neck) * 0.5), color, width, r, 1.0)
+        sketch_line(draw, (cx, shoulder), (x1, neck + (hip - neck) * 0.5), color, width, r, 1.0)
     sketch_line(draw, (cx, hip), (x0, y1), color, width, r, 1.0)
     sketch_line(draw, (cx, hip), (x1, y1), color, width, r, 1.0)
 

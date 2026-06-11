@@ -16,7 +16,7 @@ from render.engine import SCENE_HANDLERS, render_frame, render_spec, resolution_
 SCENE_TYPES = {
     "hook_claim", "hook_question", "pattern_interrupt", "title_writeon",
     "boxes_popin", "object_hop", "arrow_flow", "celebration", "end_card",
-    "camera_pan", "custom_sprite_path",
+    "camera_pan", "custom_sprite_path", "basketball_tip", "scoreboard",
 }
 
 HAS_FFMPEG = shutil.which("ffmpeg") is not None
