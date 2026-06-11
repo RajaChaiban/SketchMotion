@@ -32,7 +32,7 @@ def _payload(tmp_path, **over) -> dict:
 
 async def test_stub_path_produces_mp4_and_done(tmp_path):
     q = FakeQueue()
-    settings = Settings(gemini_api_key="", output_dir=str(tmp_path))
+    settings = Settings(gemini_api_key="", llm_provider="stub", output_dir=str(tmp_path))
     result = await run_generate(q, settings, _payload(tmp_path))
 
     out = tmp_path / "job-test.mp4"
@@ -47,15 +47,18 @@ async def test_stub_path_produces_mp4_and_done(tmp_path):
 
 async def test_rejected_prompt_marks_failed(tmp_path):
     q = FakeQueue()
-    settings = Settings(gemini_api_key="", output_dir=str(tmp_path))
+    settings = Settings(gemini_api_key="", llm_provider="stub", output_dir=str(tmp_path))
     await run_generate(q, settings, _payload(tmp_path, prompt="make Batman fly"))
     assert q.jobs["job-test"]["status"] == "failed"
     assert "batman" in q.jobs["job-test"]["error"].lower()
     assert not (tmp_path / "job-test.mp4").exists()
 
 
-class _FakeClient:
-    """Stands in for GeminiClient when a key is configured."""
+class _FakeProvider:
+    """Stands in for a vision-capable LLM provider (e.g. Gemini)."""
+
+    name = "fake"
+    supports_vision = True
 
     def __init__(self):
         self.vision_called = False
@@ -65,21 +68,21 @@ class _FakeClient:
         return ImageBrief(subject="rocket", suggested_sprites=["rocket"])
 
     def compile_spec(self, *, refined_prompt, target_duration_s, aspect, image_brief):
-        # exercise the gemini branch deterministically
+        # exercise the vision-fed compile branch deterministically
         assert image_brief is not None and image_brief.subject == "rocket"
         return stub_compile(refined_prompt, target_duration_s, aspect)
 
 
-async def test_gemini_branch_with_image(tmp_path):
+async def test_vision_provider_branch_with_image(tmp_path):
     img = tmp_path / "logo.png"
     img.write_bytes(b"\x89PNG fake-bytes")
     q = FakeQueue()
     settings = Settings(gemini_api_key="a-key", output_dir=str(tmp_path))
-    fake = _FakeClient()
+    fake = _FakeProvider()
     await run_generate(
         q, settings,
         _payload(tmp_path, image_path=str(img), image_mime="image/png"),
-        client=fake,
+        provider=fake,
     )
     assert fake.vision_called
     assert q.jobs["job-test"]["status"] == "done"
@@ -88,7 +91,7 @@ async def test_gemini_branch_with_image(tmp_path):
 
 async def test_status_progression_recorded(tmp_path):
     q = FakeQueue()
-    settings = Settings(gemini_api_key="", output_dir=str(tmp_path))
+    settings = Settings(gemini_api_key="", llm_provider="stub", output_dir=str(tmp_path))
     await run_generate(q, settings, _payload(tmp_path))
     # final state is terminal; spec + progress set along the way
     assert q.jobs["job-test"]["status"] == "done"

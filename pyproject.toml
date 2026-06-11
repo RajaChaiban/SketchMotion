@@ -38,4 +38,5 @@ pythonpath = ["."]
 testpaths = ["tests"]
 markers = [
   "live: hits the real Gemini API (requires GEMINI_API_KEY); skipped by default",
+  "claude_cli: hits the real local `claude` CLI (costs tokens); opt-in via RUN_CLAUDE_CLI",
 ]

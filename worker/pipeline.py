@@ -15,7 +15,8 @@ from pathlib import Path
 from app.config import Settings
 from app.queue import JobQueue
 from render.engine import render_spec
-from worker.gemini_client import GeminiClient, ImageBrief, stub_compile
+from worker.gemini_client import ImageBrief
+from worker.llm import LLMProvider, get_provider
 from worker.refine import ContentRejected, refine
 
 log = logging.getLogger("sketchmotion.pipeline")
@@ -25,7 +26,7 @@ async def run_generate(
     queue: JobQueue,
     settings: Settings,
     payload: dict,
-    client: GeminiClient | None = None,
+    provider: LLMProvider | None = None,
 ) -> dict:
     job_id = payload["job_id"]
     prompt = payload["prompt"]
@@ -36,34 +37,31 @@ async def run_generate(
     image_mime = payload.get("image_mime") or "image/png"
 
     try:
-        use_gemini = settings.gemini_enabled
-        if use_gemini and client is None:
-            client = GeminiClient(settings)
+        if provider is None:
+            provider = get_provider(settings)
+        log.info("using_provider", extra={"job_id": job_id, "provider": provider.name})
 
-        # Step 1 — vision (only with an image + a key)
+        # Step 1 — vision (only with an image + a vision-capable provider)
         image_brief: ImageBrief | None = None
-        if image_path and use_gemini and client is not None:
+        if image_path and provider.supports_vision:
             await queue.set_status(job_id, status="vision", progress_pct=10)
             data = await asyncio.to_thread(Path(image_path).read_bytes)
-            image_brief = await asyncio.to_thread(client.vision, data, image_mime)
+            image_brief = await asyncio.to_thread(provider.vision, data, image_mime)
 
         # Step 2 — refine (passthrough hook; raises ContentRejected for blocked IP)
         await queue.set_status(job_id, status="refining", progress_pct=25)
         refined = refine(prompt, image_brief)
 
-        # Step 3 — spec compilation (Gemini, or deterministic stub)
+        # Step 3 — spec compilation (provider-specific; runs off the event loop)
         await queue.set_status(job_id, status="compiling", progress_pct=40)
-        if use_gemini and client is not None:
-            spec = await asyncio.to_thread(
-                lambda: client.compile_spec(
-                    refined_prompt=refined.prompt,
-                    target_duration_s=duration,
-                    aspect=aspect,
-                    image_brief=image_brief,
-                )
+        spec = await asyncio.to_thread(
+            lambda: provider.compile_spec(
+                refined_prompt=refined.prompt,
+                target_duration_s=duration,
+                aspect=aspect,
+                image_brief=image_brief,
             )
-        else:
-            spec = stub_compile(refined.prompt, duration, aspect)
+        )
         await queue.set_spec(job_id, spec.model_dump_json())
 
         # Step 5 — render

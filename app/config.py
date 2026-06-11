@@ -11,11 +11,20 @@ class Settings(BaseSettings):
         env_file=".env", env_file_encoding="utf-8", extra="ignore"
     )
 
-    # Gemini — empty key => deterministic stub spec compiler (no network).
+    # LLM provider selection: auto | gemini | claude_cli | stub.
+    # "auto" => gemini if a key is set, else the local claude CLI if present, else stub.
+    llm_provider: str = "auto"
+
+    # Gemini — empty key => not used unless explicitly selected.
     gemini_api_key: str = ""
     gemini_vision_model: str = "gemini-2.5-flash"
     gemini_spec_model: str = "gemini-2.5-flash"
     gemini_spec_model_fallback: str = "gemini-2.5-pro"
+
+    # Claude Code CLI provider (dev-time spec compilation without an API key).
+    claude_cli_path: str = "claude"
+    claude_cli_model: str = "sonnet"
+    claude_cli_timeout: int = 180
 
     # Infra
     redis_url: str = "redis://localhost:6379"

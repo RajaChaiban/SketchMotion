@@ -40,6 +40,34 @@ SAFE_ZONES: dict[str, tuple[float, float]] = {
 }
 
 
+def fit_label(draw, text: str, max_w: float, max_h: float, base_px: float):
+    """Largest font (and wrap) that fits `text` inside (max_w, max_h). Returns (font, lines, line_h)."""
+    px = max(10.0, base_px)
+    while px >= 10:
+        font = get_font(int(px))
+        lines = P.wrap_text(draw, text, font, max_w)
+        _, lh = P.text_size(draw, "Ag", font)
+        widest = max(P.text_size(draw, ln, font)[0] for ln in lines)
+        if widest <= max_w and lh * len(lines) <= max_h:
+            return font, lines, lh
+        px -= 2
+    font = get_font(10)
+    lines = P.wrap_text(draw, text, font, max_w)
+    _, lh = P.text_size(draw, "Ag", font)
+    return font, lines, lh
+
+
+def draw_label(draw, text: str, center, max_w: float, max_h: float, base_px: float, color=None):
+    color = INK if color is None else color
+    font, lines, lh = fit_label(draw, text, max_w, max_h, base_px)
+    cx, cy = center
+    y = cy - lh * len(lines) / 2
+    for ln in lines:
+        tw, _ = P.text_size(draw, ln, font)
+        draw.text((cx - tw / 2, y), ln, font=font, fill=color)
+        y += lh
+
+
 @dataclass
 class Frame:
     img: Image.Image
@@ -90,7 +118,6 @@ def _h_boxes(f: Frame) -> None:
     ch = min(h * 0.22, w * 0.8 / cols * 0.7)
     x_start = (w - cw * cols) / 2
     y_start = (h - ch * rows - (rows - 1) * ch * 0.3) / 2
-    font = f.font(ch * 0.26)
     for i, label in enumerate(items):
         rdx, cdx = divmod(i, cols)
         appear = P.clamp01((f.t - i * 0.12) / 0.4)
@@ -106,8 +133,7 @@ def _h_boxes(f: Frame) -> None:
         box = (cx - bw / 2, cy - bh / 2, cx + bw / 2, cy + bh / 2)
         P.sketch_rect(f.draw, box, accent(i, f.palette), 4, f.rng, 2.5)
         if s > 0.85:
-            tw, th = P.text_size(f.draw, label, font)
-            f.draw.text((cx - tw / 2, cy - th / 2), label, font=font, fill=INK)
+            draw_label(f.draw, label, (cx, cy), cw * 0.84 * 0.86, ch * 0.84 * 0.8, ch * 0.26)
 
 
 def _h_object_hop(f: Frame) -> None:
@@ -131,7 +157,6 @@ def _h_arrow_flow(f: Frame) -> None:
     bw = w * 0.8 / n
     boxw = bw * 0.66
     boxh = min(h * 0.2, boxw * 0.7)
-    font = f.font(boxh * 0.3)
     centers = [(w * 0.1 + bw * (i + 0.5), cy) for i in range(n)]
     for i, (cx, _) in enumerate(centers):
         appear = P.clamp01((f.t - i * 0.18) / 0.3)
@@ -141,8 +166,7 @@ def _h_arrow_flow(f: Frame) -> None:
         box = (cx - boxw / 2 * s, cy - boxh / 2 * s, cx + boxw / 2 * s, cy + boxh / 2 * s)
         P.sketch_rect(f.draw, box, accent(i, f.palette), 4, f.rng, 2.0)
         if s > 0.85:
-            tw, th = P.text_size(f.draw, steps[i], font)
-            f.draw.text((cx - tw / 2, cy - th / 2), steps[i], font=font, fill=INK)
+            draw_label(f.draw, steps[i], (cx, cy), boxw * 0.86, boxh * 0.8, boxh * 0.3)
         if i > 0:
             ap = P.clamp01((f.t - (i - 0.5) * 0.18) / 0.25)
             if ap > 0:
