@@ -1,0 +1,13 @@
+{
+  "title": "Vertical Launch",
+  "fps": 30,
+  "aspect": "9:16",
+  "palette_override": ["#ff6b4a", "#2d7dd2", "#f4b942"],
+  "scenes": [
+    { "type": "hook_question", "duration_s": 2.0, "params": { "text": "Launch day?" }, "caption": "Launch day?" },
+    { "type": "boxes_popin", "duration_s": 3.0, "params": { "items": ["Build", "Polish", "Ship"] } },
+    { "type": "celebration", "duration_s": 3.0, "params": { "label": "Shipped!" }, "caption": "We shipped" },
+    { "type": "end_card", "duration_s": 2.0, "params": { "title": "SketchMotion", "subtitle": "make it move" } }
+  ],
+  "total_duration_s": 10.0
+}

@@ -1,0 +1,10 @@
+{
+  "title": "Minimal",
+  "fps": 30,
+  "aspect": "16:9",
+  "scenes": [
+    { "type": "hook_claim", "duration_s": 2.5, "params": { "text": "You are doing it wrong." } },
+    { "type": "end_card", "duration_s": 2.5, "params": { "title": "Fix it today" } }
+  ],
+  "total_duration_s": 5.0
+}

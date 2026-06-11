@@ -1,0 +1,13 @@
+{
+  "title": "Square Demo",
+  "fps": 24,
+  "aspect": "1:1",
+  "scenes": [
+    { "type": "pattern_interrupt", "duration_s": 2.0, "params": { "text": "Wait." } },
+    { "type": "object_hop", "duration_s": 3.0, "params": { "sprite": "rocket", "hops": 3 } },
+    { "type": "camera_pan", "duration_s": 3.0, "params": { "items": ["star", "bulb", "heart"] } },
+    { "type": "custom_sprite_path", "duration_s": 2.0, "params": { "sprite": "star", "path": [[0.1, 0.8], [0.5, 0.2], [0.9, 0.8]] } },
+    { "type": "end_card", "duration_s": 2.0, "params": { "title": "The End" } }
+  ],
+  "total_duration_s": 12.0
+}
