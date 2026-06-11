@@ -258,9 +258,10 @@ async function cpoll(jobId, outputKind) {
     const j = await r.json();
     $("cstatus").textContent = `Status: ${j.status} (${j.progress_pct}%)`;
     $("cbar").style.width = `${j.progress_pct}%`;
+    const kind = j.output_kind || outputKind;  // agent's final decision wins
     if (j.status === "done") {
       clearInterval(cpolling);
-      if (outputKind === "still") {
+      if (kind === "still") {
         const im = $("cimage"); im.src = `/jobs/${jobId}/image?t=${Date.now()}`; im.style.display = "block";
       } else {
         const v = $("cplayer"); v.src = `/jobs/${jobId}/video`; v.style.display = "block";

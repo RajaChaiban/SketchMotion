@@ -121,41 +121,41 @@ async def test_stylize_rejects_non_video(client):
 
 # --- unified /create intake ---
 
-async def test_create_prompt_routes_to_animate(client, fake_queue):
+async def test_create_auto_defers_to_intake_job(client, fake_queue):
+    """Default mode=auto routes through the AI agent (intake_job)."""
     r = await client.post("/create", data={"prompt": "celebrate a launch", "duration_s": "15"})
     assert r.status_code == 200
     body = r.json()
-    assert body["route"] == "animate" and body["output_kind"] == "video"
-    assert fake_queue.enqueued[0]["function"] == "generate_job"
+    assert body["route"] == "animate" and body["output_kind"] == "video"  # provisional
+    assert fake_queue.enqueued[0]["function"] == "intake_job"
     assert fake_queue.enqueued[0]["prompt"] == "celebrate a launch"
+    assert fake_queue.enqueued[0]["options"]["duration_s"] == 15
 
 
-async def test_create_image_routes_to_still(client, fake_queue):
+async def test_create_auto_image_provisional_still(client, fake_queue):
     files = {"file": ("photo.png", io.BytesIO(b"\x89PNG\r\n\x1a\n" + b"0" * 64), "image/png")}
     r = await client.post("/create", data={"style": "pencil"}, files=files)
     assert r.status_code == 200
-    body = r.json()
-    assert body["route"] == "stylize_image" and body["output_kind"] == "still"
-    assert body["style"] == "pencil"
-    assert fake_queue.enqueued[0]["function"] == "stylize_image_job"
-    assert fake_queue.enqueued[0]["image_path"].endswith(".img")
+    assert r.json()["route"] == "stylize_image" and r.json()["output_kind"] == "still"
+    assert fake_queue.enqueued[0]["function"] == "intake_job"
+    assert fake_queue.enqueued[0]["file_kind"] == "image"
 
 
-async def test_create_video_routes_to_stylize(client, fake_queue):
+async def test_create_explicit_animate_routes_direct(client, fake_queue):
+    r = await client.post("/create", data={"prompt": "a recap", "mode": "animate", "duration_s": "12"})
+    assert r.status_code == 200
+    assert r.json()["route"] == "animate"
+    assert fake_queue.enqueued[0]["function"] == "generate_job"  # direct, no agent hop
+    assert fake_queue.enqueued[0]["prompt"] == "a recap"
+
+
+async def test_create_explicit_stylize_video_routes_direct(client, fake_queue):
     files = {"file": ("clip.mp4", io.BytesIO(b"\x00\x00\x00\x18ftypmp42" + b"0" * 64), "video/mp4")}
-    r = await client.post("/create", data={"style": "ink"}, files=files)
+    r = await client.post("/create", data={"mode": "stylize", "style": "ink"}, files=files)
     assert r.status_code == 200
     assert r.json()["route"] == "stylize_video"
     assert fake_queue.enqueued[0]["function"] == "stylize_job"
-
-
-async def test_create_image_plus_prompt_animates(client, fake_queue):
-    files = {"file": ("logo.png", io.BytesIO(b"\x89PNG\r\n\x1a\n" + b"0" * 64), "image/png")}
-    r = await client.post("/create", data={"prompt": "logo reveal", "duration_s": "12"}, files=files)
-    assert r.status_code == 200
-    assert r.json()["route"] == "animate"
-    assert fake_queue.enqueued[0]["function"] == "generate_job"
-    assert fake_queue.enqueued[0]["image_path"] is not None
+    assert fake_queue.enqueued[0]["style"] == "ink"
 
 
 async def test_create_requires_some_input(client):

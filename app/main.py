@@ -241,17 +241,34 @@ async def create(
         async with aiofiles.open(video_path, "wb") as fh:
             await fh.write(data)
 
-    payload: dict = {"job_id": job_id}
-    if plan.job_function == "generate_job":
-        payload.update(prompt=prompt.strip(), duration_s=duration_s, aspect=aspect,
-                       captions=captions, draft=False,
-                       image_path=image_path, image_mime=(file.content_type if file else None))
-    elif plan.job_function == "stylize_job":
-        payload.update(video_path=video_path, style=plan.style)
-    else:  # stylize_image_job
-        payload.update(image_path=image_path, style=plan.style)
+    image_mime = file.content_type if file else None
+    if mode == "auto":
+        # defer the decision to the AI agent in the worker (intake_job)
+        payload = {
+            "job_id": job_id,
+            "prompt": prompt.strip(),
+            "file_kind": file_kind,
+            "image_path": image_path,
+            "image_mime": image_mime,
+            "video_path": video_path,
+            "options": {"output_kind": output_kind, "style": style,
+                        "duration_s": duration_s, "aspect": aspect, "captions": captions},
+        }
+        await queue.enqueue("intake_job", payload, job_id)
+    else:
+        payload = {"job_id": job_id}
+        if plan.job_function == "generate_job":
+            payload.update(prompt=prompt.strip(), duration_s=duration_s, aspect=aspect,
+                           captions=captions, draft=False,
+                           image_path=image_path, image_mime=image_mime)
+        elif plan.job_function == "stylize_job":
+            payload.update(video_path=video_path, style=plan.style)
+        else:  # stylize_image_job
+            payload.update(image_path=image_path, style=plan.style)
+        await queue.enqueue(plan.job_function, payload, job_id)
 
-    await queue.enqueue(plan.job_function, payload, job_id)
+    # provisional route/output_kind (the agent may refine for auto); status reflects the final
+    await queue.set_meta(job_id, route=plan.route, output_kind=plan.output_kind)
     return CreateResponse(job_id=job_id, status="queued", route=plan.route,
                           output_kind=plan.output_kind, style=plan.style)
 
@@ -266,6 +283,8 @@ async def job_status(job_id: str, queue: JobQueue = Depends(get_queue)) -> JobSt
         status=data.get("status", "queued"),
         progress_pct=data.get("progress_pct", 0),
         error=data.get("error"),
+        route=data.get("route"),
+        output_kind=data.get("output_kind"),
     )
 
 

@@ -6,7 +6,7 @@ from typing import Literal
 from pydantic import BaseModel
 
 JobState = Literal[
-    "queued", "vision", "refining", "compiling", "rendering", "done", "failed"
+    "queued", "analyzing", "vision", "refining", "compiling", "rendering", "done", "failed"
 ]
 
 
@@ -28,3 +28,5 @@ class JobStatus(BaseModel):
     status: JobState
     progress_pct: int = 0
     error: str | None = None
+    route: str | None = None
+    output_kind: str | None = None

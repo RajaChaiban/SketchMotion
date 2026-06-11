@@ -44,6 +44,10 @@ class LLMProvider(Protocol):
 
     def vision(self, image_bytes: bytes, mime: str) -> ImageBrief | None: ...
 
+    def analyze(self, prompt: str) -> str | None:
+        """Generic text/JSON completion for routing/classification. None = no LLM available."""
+        ...
+
 
 # --- shared helpers ----------------------------------------------------------
 
@@ -97,6 +101,9 @@ class StubProvider:
     def vision(self, image_bytes, mime):
         return None
 
+    def analyze(self, prompt):
+        return None  # no LLM -> caller falls back to deterministic routing
+
 
 class GeminiProvider:
     name = "gemini"
@@ -116,6 +123,13 @@ class GeminiProvider:
 
     def vision(self, image_bytes, mime):
         return self.client.vision(image_bytes, mime)
+
+    def analyze(self, prompt):
+        raw = self.client._raw_generate(
+            model=self.client.settings.gemini_spec_model,
+            contents=[prompt], response_schema=None, temperature=0.2,
+        )
+        return raw.text
 
 
 class ClaudeCliProvider:
@@ -162,6 +176,9 @@ class ClaudeCliProvider:
 
     def vision(self, image_bytes, mime):
         return None  # CLI vision is deferred; production uses Gemini for images
+
+    def analyze(self, prompt):
+        return self._run_cli(prompt)
 
 
 # --- factory -----------------------------------------------------------------

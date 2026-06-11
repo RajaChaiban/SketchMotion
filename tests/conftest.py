@@ -46,6 +46,10 @@ class FakeQueue:
     async def set_spec(self, job_id, spec_json: str):
         self.jobs.setdefault(job_id, {})["spec"] = spec_json
 
+    async def set_meta(self, job_id, **fields):
+        rec = self.jobs.setdefault(job_id, {})
+        rec.update({k: v for k, v in fields.items() if v is not None})
+
     async def get_status(self, job_id: str) -> dict | None:
         return self.jobs.get(job_id)
 
