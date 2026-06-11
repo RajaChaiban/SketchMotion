@@ -47,9 +47,19 @@ deterministic stub until a `GEMINI_API_KEY` is supplied — no code change to go
 | 4 | Gemini client (mocked) + stub compiler | ✅ |
 | 5 | Full pipeline + API wiring (verified live) | ✅ |
 
-**Generate mode is complete and runs end-to-end** (94 tests passing). With no
-`GEMINI_API_KEY`, the deterministic stub compiler produces real MP4s today; add a key to
-switch to live Gemini spec compilation — no code change.
+**Generate mode is complete and runs end-to-end** (105 tests passing).
+
+### Spec compiler is pluggable (`LLM_PROVIDER`)
+
+| Provider | When | Needs |
+|---|---|---|
+| `gemini` | production | `GEMINI_API_KEY` |
+| `claude_cli` | dev — real prompt-aware specs now | local `claude` CLI on PATH |
+| `stub` | CI / offline | nothing (deterministic templates) |
+
+`auto` (default) picks gemini if a key is set, else the local `claude` CLI, else stub.
+So on a dev box running Claude Code you get real prompt-aware compilation with **no API
+key**; production just sets `LLM_PROVIDER=gemini` + the key — no code change.
 
 Deferred (see [`docs/product-plan.md`](docs/product-plan.md)): Phase 6 TTS/webhooks,
 7 overlay mode, 8 style learning, 9 hardening, 10 brand kits/captions/marketing.
