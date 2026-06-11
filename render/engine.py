@@ -40,6 +40,34 @@ SAFE_ZONES: dict[str, tuple[float, float]] = {
 }
 
 
+# Map glyphs the hand-drawn font can't render to ASCII so text never shows tofu/mojibake.
+_TEXT_REPL = {
+    "→": "->", "←": "<-", "↑": "up", "↓": "down", "⇒": "=>",
+    "–": "-", "—": "-", "•": "-", "…": "...",
+    "“": '"', "”": '"', "‘": "'", "’": "'",
+}
+
+
+def clean_text(s):
+    if not isinstance(s, str):
+        return s
+    for k, v in _TEXT_REPL.items():
+        s = s.replace(k, v)
+    return s
+
+
+def _clean_params(params: dict) -> dict:
+    out = {}
+    for k, v in params.items():
+        if isinstance(v, str):
+            out[k] = clean_text(v)
+        elif isinstance(v, list):
+            out[k] = [clean_text(x) if isinstance(x, str) else x for x in v]
+        else:
+            out[k] = v
+    return out
+
+
 def fit_label(draw, text: str, max_w: float, max_h: float, base_px: float):
     """Largest font (and wrap) that fits `text` inside (max_w, max_h). Returns (font, lines, line_h)."""
     px = max(10.0, base_px)
@@ -313,7 +341,7 @@ def render_frame(spec: dict, scene_idx: int, frame_idx: int, n_frames: int) -> I
         palette=palette,
         rng=P.rng(scene_idx * 1_000_003 + frame_idx),
         scene_seed=scene_idx * 7919 + 13,
-        params=scene.get("params") or {},
+        params=_clean_params(scene.get("params") or {}),
     )
     handler = SCENE_HANDLERS.get(scene["type"])
     if handler is None:
@@ -321,7 +349,7 @@ def render_frame(spec: dict, scene_idx: int, frame_idx: int, n_frames: int) -> I
     handler(frame)
     caption = scene.get("caption")
     if caption:
-        _draw_caption(draw, str(caption), size, spec.get("aspect", "16:9"), palette)
+        _draw_caption(draw, clean_text(str(caption)), size, spec.get("aspect", "16:9"), palette)
     return img
 
 

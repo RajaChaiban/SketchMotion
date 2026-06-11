@@ -130,7 +130,12 @@ class ClaudeCliProvider:
         if self.settings.claude_cli_model:
             cmd += ["--model", self.settings.claude_cli_model]
         proc = subprocess.run(
-            cmd, capture_output=True, text=True, timeout=self.settings.claude_cli_timeout
+            cmd,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",      # CLI emits UTF-8; Windows default cp1252 would crash on em-dashes/arrows
+            errors="replace",
+            timeout=self.settings.claude_cli_timeout,
         )
         if proc.returncode != 0:
             raise SpecCompilationError(f"claude CLI exited {proc.returncode}: {proc.stderr[:300]}")

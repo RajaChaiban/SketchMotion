@@ -50,6 +50,22 @@ def test_render_is_deterministic():
     assert np.array_equal(a, b)
 
 
+def test_unicode_text_is_sanitized_not_tofu():
+    from render.engine import clean_text
+
+    assert clean_text("Plan → List → Save") == "Plan -> List -> Save"
+    assert clean_text("↑ BDNF & Dopamine") == "up BDNF & Dopamine"
+    assert clean_text("“smart” quotes — dash") == '"smart" quotes - dash'
+    # a scene carrying arrows still renders without error
+    spec = {
+        "fps": 30, "aspect": "16:9", "resolution": [320, 180],
+        "scenes": [{"type": "arrow_flow", "duration_s": 2.0,
+                    "params": {"steps": ["Move", "↑ Flow", "Clarity"]}}],
+    }
+    img = render_frame(spec, 0, 30, 60)
+    assert (np.asarray(img) < 250).any()
+
+
 def test_resolution_derivation():
     assert resolution_for({"aspect": "9:16"}) == (720, 1280)
     assert resolution_for({"aspect": "16:9", "resolution": [100, 50]}) == (100, 50)

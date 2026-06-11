@@ -89,6 +89,7 @@ Rules:
 - target_duration_s = {target_duration_s}; aspect = {aspect}.
 - Set "title", "fps" (24 or 30), "aspect"="{aspect}", "total_duration_s", and "scenes".
 - Each scene may include an optional "caption" (short, for muted autoplay).
+- Use plain ASCII in all text/labels/captions — no arrows (→ ↑), bullets, or smart quotes; write "to" or "->".
 {PRIMITIVE_CATALOG}
 User prompt: {refined_prompt!r}
 Image brief (may be null): {brief_json}

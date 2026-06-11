@@ -84,6 +84,44 @@ def test_claude_cli_retries_then_succeeds():
     assert isinstance(spec, SceneSpec)
 
 
+def test_claude_cli_run_handles_unicode_envelope(monkeypatch):
+    """Regression: CLI stdout is UTF-8 (em-dashes/arrows) — must not crash on Windows."""
+    import json as _json
+
+    import worker.llm as llm
+
+    envelope = {
+        "is_error": False,
+        "result": f"Here you go — with an arrow ↑\n```json\n{_valid_json(10)}\n```",
+        "usage": {"output_tokens": 50},
+        "total_cost_usd": 0.01,
+    }
+
+    class FakeProc:
+        returncode = 0
+        stdout = _json.dumps(envelope)
+        stderr = ""
+
+    monkeypatch.setattr(llm.subprocess, "run", lambda *a, **k: FakeProc())
+    prov = ClaudeCliProvider(Settings())
+    spec = prov.compile_spec(refined_prompt="x", target_duration_s=10.0)
+    assert isinstance(spec, SceneSpec)
+
+
+def test_claude_cli_nonzero_exit_raises(monkeypatch):
+    import worker.llm as llm
+
+    class FakeProc:
+        returncode = 1
+        stdout = ""
+        stderr = "boom"
+
+    monkeypatch.setattr(llm.subprocess, "run", lambda *a, **k: FakeProc())
+    prov = ClaudeCliProvider(Settings())
+    with pytest.raises(SpecCompilationError):
+        prov.compile_spec(refined_prompt="x", target_duration_s=10.0)
+
+
 def test_claude_cli_all_fail_raises():
     prov = ClaudeCliProvider(Settings())
     prov._run_cli = lambda prompt: "never valid"
