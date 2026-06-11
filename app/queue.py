@@ -53,6 +53,9 @@ class JobQueue:
         if mapping:
             await self._redis.hset(self._key(job_id), mapping=mapping)
 
+    async def set_spec(self, job_id: str, spec_json: str) -> None:
+        await self._redis.hset(self._key(job_id), mapping={"spec": spec_json})
+
     async def get_status(self, job_id: str) -> dict | None:
         data = await self._redis.hgetall(self._key(job_id))
         if not data:

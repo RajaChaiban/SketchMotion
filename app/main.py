@@ -162,4 +162,6 @@ async def job_spec(job_id: str, queue: JobQueue = Depends(get_queue)) -> JSONRes
     data = await queue.get_status(job_id)
     if data is None or "spec" not in data:
         raise HTTPException(status_code=404, detail="spec not available")
-    return JSONResponse(content={"spec": data["spec"]})
+    import json
+
+    return JSONResponse(content={"spec": json.loads(data["spec"])})

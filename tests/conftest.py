@@ -31,6 +31,9 @@ class FakeQueue:
         if error is not None:
             rec["error"] = error
 
+    async def set_spec(self, job_id, spec_json: str):
+        self.jobs.setdefault(job_id, {})["spec"] = spec_json
+
     async def get_status(self, job_id: str) -> dict | None:
         return self.jobs.get(job_id)
 
