@@ -1,0 +1,26 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+
+# uv
+.venv/
+uv.lock.tmp
+
+# Environment / secrets
+.env
+*.local
+
+# Render output & temp frames
+outputs/
+data/
+*.mp4
+!tests/**/fixtures/*.mp4
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

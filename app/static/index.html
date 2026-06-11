@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>SketchMotion</title>
+<style>
+  :root {
+    --ink: #1f2933; --paper: #fbf9f4; --accent: #ff6b4a; --accent-2: #2d7dd2;
+    --line: #d9d2c5; --muted: #8a8273;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--paper); color: var(--ink);
+    font-family: "Comic Sans MS", "Segoe Print", system-ui, sans-serif;
+    display: flex; min-height: 100vh; align-items: flex-start; justify-content: center;
+  }
+  .wrap { width: min(880px, 94vw); padding: 40px 0 80px; }
+  h1 { font-size: 2.4rem; margin: 0 0 4px; letter-spacing: -0.5px; }
+  .tag { color: var(--muted); margin: 0 0 28px; }
+  .card {
+    background: #fff; border: 2.5px solid var(--ink); border-radius: 14px;
+    padding: 22px; box-shadow: 6px 6px 0 rgba(31,41,51,0.12); margin-bottom: 22px;
+  }
+  label { display: block; font-weight: 700; margin: 14px 0 6px; }
+  textarea, select, input[type=file] {
+    width: 100%; font: inherit; padding: 10px 12px; border: 2px solid var(--ink);
+    border-radius: 10px; background: var(--paper);
+  }
+  textarea { min-height: 84px; resize: vertical; }
+  .row { display: flex; gap: 18px; flex-wrap: wrap; }
+  .row > div { flex: 1 1 200px; }
+  .range-val { font-weight: 700; color: var(--accent-2); }
+  button {
+    margin-top: 20px; font: inherit; font-weight: 800; font-size: 1.1rem;
+    background: var(--accent); color: #fff; border: 2.5px solid var(--ink);
+    border-radius: 12px; padding: 12px 26px; cursor: pointer;
+    box-shadow: 4px 4px 0 var(--ink); transition: transform .05s;
+  }
+  button:active { transform: translate(2px, 2px); box-shadow: 2px 2px 0 var(--ink); }
+  button:disabled { opacity: .55; cursor: not-allowed; }
+  #status { margin-top: 16px; font-weight: 700; min-height: 1.4em; }
+  .bar { height: 14px; border: 2px solid var(--ink); border-radius: 8px; overflow: hidden; background: var(--paper); margin-top: 8px; }
+  .bar > i { display: block; height: 100%; width: 0; background: var(--accent-2); transition: width .3s; }
+  video { width: 100%; border: 2.5px solid var(--ink); border-radius: 12px; margin-top: 18px; background: #000; }
+  .err { color: #c0392b; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>✎ SketchMotion</h1>
+  <p class="tag">Type a prompt. Get a hand-drawn sketch video.</p>
+
+  <div class="card">
+    <label for="prompt">Prompt</label>
+    <textarea id="prompt" placeholder="e.g. celebrate a product launch with confetti and a trophy"></textarea>
+
+    <label for="image">Reference image (optional)</label>
+    <input type="file" id="image" accept="image/*" />
+
+    <div class="row">
+      <div>
+        <label for="duration">Duration — <span class="range-val" id="durval">15</span>s</label>
+        <input type="range" id="duration" min="5" max="60" value="15" style="width:100%" />
+      </div>
+      <div>
+        <label for="aspect">Format</label>
+        <select id="aspect">
+          <option value="16:9">YouTube / Web (16:9)</option>
+          <option value="9:16">Reels / Shorts / TikTok (9:16)</option>
+          <option value="1:1">LinkedIn / Feed (1:1)</option>
+        </select>
+      </div>
+    </div>
+
+    <button id="go">Generate sketch →</button>
+    <div id="status"></div>
+    <div class="bar" id="barwrap" style="display:none"><i id="bar"></i></div>
+    <video id="player" controls style="display:none"></video>
+  </div>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+$("duration").addEventListener("input", () => $("durval").textContent = $("duration").value);
+
+let polling = null;
+
+async function poll(jobId) {
+  try {
+    const r = await fetch(`/jobs/${jobId}`);
+    if (!r.ok) throw new Error(`status ${r.status}`);
+    const j = await r.json();
+    $("status").textContent = `Status: ${j.status} (${j.progress_pct}%)`;
+    $("bar").style.width = `${j.progress_pct}%`;
+    if (j.status === "done") {
+      clearInterval(polling);
+      const v = $("player");
+      v.src = `/jobs/${jobId}/video`;
+      v.style.display = "block";
+      $("go").disabled = false;
+    } else if (j.status === "failed") {
+      clearInterval(polling);
+      $("status").innerHTML = `<span class="err">Failed: ${j.error || "unknown error"}</span>`;
+      $("go").disabled = false;
+    }
+  } catch (e) {
+    clearInterval(polling);
+    $("status").innerHTML = `<span class="err">Lost connection: ${e.message}</span>`;
+    $("go").disabled = false;
+  }
+}
+
+$("go").addEventListener("click", async () => {
+  const prompt = $("prompt").value.trim();
+  if (!prompt) { $("status").innerHTML = `<span class="err">Enter a prompt first.</span>`; return; }
+  $("go").disabled = true;
+  $("player").style.display = "none";
+  $("barwrap").style.display = "block";
+  $("bar").style.width = "0%";
+  $("status").textContent = "Queuing…";
+
+  const fd = new FormData();
+  fd.append("prompt", prompt);
+  fd.append("duration_s", $("duration").value);
+  fd.append("aspect", $("aspect").value);
+  fd.append("captions", "true");
+  const img = $("image").files[0];
+  if (img) fd.append("image", img);
+
+  try {
+    const r = await fetch("/generate", { method: "POST", body: fd });
+    const j = await r.json();
+    if (!r.ok) throw new Error(j.detail || `status ${r.status}`);
+    $("status").textContent = "Queued.";
+    polling = setInterval(() => poll(j.job_id), 1000);
+  } catch (e) {
+    $("status").innerHTML = `<span class="err">${e.message}</span>`;
+    $("go").disabled = false;
+  }
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,41 @@
+[project]
+name = "sketchmotion"
+version = "0.1.0"
+description = "Prompt + image to hand-drawn sketch-style MP4. LLM compiles the spec, Python renders it."
+requires-python = ">=3.12"
+dependencies = [
+  "fastapi>=0.115",
+  "uvicorn[standard]>=0.34",
+  "python-multipart>=0.0.20",
+  "pydantic>=2.10",
+  "pydantic-settings>=2.7",
+  "slowapi>=0.1.9",
+  "arq>=0.26",
+  "redis>=5.2",
+  "aiofiles>=24.1",
+  "pillow>=11.0",
+  "numpy>=2.2",
+  "filetype>=1.2",
+  "google-genai>=1.0",
+  "tenacity>=9.0",
+]
+
+[dependency-groups]
+dev = [
+  "pytest>=8.3",
+  "pytest-asyncio>=0.25",
+  "httpx>=0.28",
+  "respx>=0.22",
+  "imagehash>=4.3",
+]
+
+[tool.uv]
+package = false
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+pythonpath = ["."]
+testpaths = ["tests"]
+markers = [
+  "live: hits the real Gemini API (requires GEMINI_API_KEY); skipped by default",
+]
