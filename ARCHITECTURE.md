@@ -67,8 +67,14 @@ Each layer is independently testable: rendering needs no Redis/LLM; the API need
 Status lifecycle: `queued → analyzing? → vision → refining → compiling → rendering → done|failed`.
 
 ### 3.2 Stylize video (real video → sketch video) — `worker/stylize.py::stylize_video`
-`ingest (ffprobe + extract frames) → sketchify each frame → re-encode`. Original **audio is
-preserved** (`ffmpeg -map 1:a:0 -shortest`). `--workers` parallelizes frames across processes.
+Frames **stream as raw RGB** between two ffmpeg subprocesses and Python — *no PNG files, no
+disk* (the old per-frame PNG extract/encode was the bottleneck). `sketchify` runs across a
+**ThreadPoolExecutor** (PIL/numpy release the GIL, so threads parallelize with **zero
+per-frame IPC** — a process pool lost all its gain shipping 2.7MB frames per task). Output is
+capped at 30fps (`max_fps`; a sketch reads fine at 30 and it halves work on 60fps sources).
+Original **audio is preserved** (`-map 1:a:0 -shortest`). Net: a 42s 720p/60fps clip went
+**16min → ~3min**. The filter is also tuned (numpy 3×3 dilation vs PIL `MaxFilter` ~85ms→~20ms;
+in-place 0..255 color blend, no /255 round-trips).
 
 ### 3.3 Stylize image (image → sketch still) — `worker/stylize.py::stylize_image`
 One frame through the same `sketchify` filter → PNG, served at `/jobs/{id}/image`.
@@ -215,5 +221,6 @@ input+option; audio survives stylization. Opt-in live markers: `live` (Gemini), 
 
 Overlay-mode **annotations** (LLM detects key moments → composite arrows/callouts on
 stylized frames), style-learning (distill a user's old animations into a reusable style
-skill), brand kits, TTS narration, and **video-stylization performance** (in-memory ffmpeg
-pipe to replace per-frame PNG extraction — current bottleneck).
+skill), brand kits, and TTS narration. *(Video-stylization performance is now handled — see
+§3.2; further gains would come from segment-parallel multiprocessing to beat the GIL ceiling,
+or GPU/`cv2` filters.)*

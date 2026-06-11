@@ -1,11 +1,12 @@
 """Per-frame sketch stylization — turns real photographic frames into hand-drawn looks.
 
-Pure pixel processing (PIL + numpy), no LLM. Two styles:
+Pure pixel processing (PIL + numpy, no scipy so it works without the dev deps). Two styles:
 - ``ink``    : bold ink outlines over posterized, paper-tinted color (cartoon/comic).
 - ``pencil`` : grayscale color-dodge pencil sketch on paper (graphite).
 
-`sketchify(img, style)` is stateless and deterministic, so it parallelizes cleanly across
-frames and is trivially testable.
+`sketchify(img, style)` is stateless and deterministic. Hot paths are tuned: edge-thickening
+uses a numpy 3x3 dilation (PIL's MaxFilter was ~85ms/frame), and the color blend runs in-place
+in 0..255 space (no /255 round-trips).
 """
 from __future__ import annotations
 
@@ -16,40 +17,51 @@ PAPER_RGB = (251, 249, 244)
 STYLES = ("ink", "pencil")
 
 
-def _edge_mask(gray: Image.Image, strength: float, thicken: int) -> np.ndarray:
-    """1.0 where the line is (dark ink), 0..1 elsewhere — ready to multiply over color."""
-    edges = gray.filter(ImageFilter.FIND_EDGES)
-    for _ in range(max(0, thicken)):
-        edges = edges.filter(ImageFilter.MaxFilter(3))
-    e = np.asarray(edges, dtype=np.float32) / 255.0
-    return np.clip(e * strength, 0.0, 1.0)
+def _dilate3(a: np.ndarray, times: int) -> np.ndarray:
+    """Fast 3x3 grayscale dilation (max filter) in numpy — replaces PIL MaxFilter."""
+    h, w = a.shape
+    for _ in range(max(0, times)):
+        p = np.pad(a, 1, mode="edge")
+        out = a.copy()
+        for dy in range(3):
+            for dx in range(3):
+                np.maximum(out, p[dy:dy + h, dx:dx + w], out=out)
+        a = out
+    return a
 
 
 def _ink(img: Image.Image, posterize_bits: int, edge_strength: float,
          thicken: int, color_mix: float) -> Image.Image:
     gray = img.convert("L")
-    e = _edge_mask(gray, edge_strength, thicken)          # ink presence 0..1
-    keep = 1.0 - e                                         # 1 where we keep color, 0 on lines
+    e = np.array(gray.filter(ImageFilter.FIND_EDGES), dtype=np.float32)  # writable copy
+    e *= edge_strength / 255.0
+    if thicken > 0:
+        e = _dilate3(e, thicken)
+    np.clip(e, 0.0, 1.0, out=e)
+    keep = 1.0 - e                                          # 1 where we keep color, 0 on ink
 
     poster = ImageOps.posterize(img, max(1, posterize_bits))
-    p = np.asarray(poster, dtype=np.float32) / 255.0
-    paper = np.asarray(PAPER_RGB, dtype=np.float32) / 255.0
-    # soften the flats toward paper so it reads as drawn, not photographic
-    col = p * color_mix + paper * (1.0 - color_mix)
-    out = col * keep[..., None]                            # lay dark ink lines on top
-    return Image.fromarray((np.clip(out, 0, 1) * 255).astype(np.uint8), "RGB")
+    col = np.array(poster, dtype=np.float32)               # 0..255, writable
+    paper = np.asarray(PAPER_RGB, dtype=np.float32)
+    col *= color_mix                                       # soften flats toward paper
+    col += paper * (1.0 - color_mix)
+    col *= keep[..., None]                                 # lay dark ink lines on top
+    np.clip(col, 0.0, 255.0, out=col)
+    return Image.fromarray(col.astype(np.uint8), "RGB")
 
 
 def _pencil(img: Image.Image, blur_radius: float) -> Image.Image:
     gray = img.convert("L")
-    g = np.asarray(gray, dtype=np.float32)
     inv = ImageOps.invert(gray).filter(ImageFilter.GaussianBlur(blur_radius))
-    b = np.asarray(inv, dtype=np.float32)
-    # color-dodge: gray * 255 / (255 - blurred_inverse)
-    dodge = np.clip(g * 255.0 / (255.0 - b + 1e-3), 0, 255) / 255.0
+    g = np.array(gray, dtype=np.float32)
+    b = np.array(inv, dtype=np.float32)
+    denom = 255.0 - b
+    np.maximum(denom, 1.0, out=denom)
+    dodge = g * (255.0 / denom)                            # color-dodge, 0..255
+    np.clip(dodge, 0.0, 255.0, out=dodge)
     paper = np.asarray(PAPER_RGB, dtype=np.float32) / 255.0
-    out = paper[None, None, :] * dodge[..., None]          # graphite where dark, paper where light
-    return Image.fromarray((np.clip(out, 0, 1) * 255).astype(np.uint8), "RGB")
+    out = dodge[..., None] * paper[None, None, :]          # graphite where dark, paper where light
+    return Image.fromarray(out.astype(np.uint8), "RGB")
 
 
 def sketchify(

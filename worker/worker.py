@@ -37,7 +37,8 @@ async def _do_stylize_video(queue: JobQueue, settings, payload: dict) -> dict[st
     await asyncio.to_thread(
         stylize_video, payload["video_path"], out_path,
         style=style, opts=style_opts(style),
-        max_seconds=settings.max_video_seconds, workers=payload.get("workers"),
+        max_seconds=settings.max_video_seconds,
+        workers=payload.get("workers") or settings.stylize_workers,
     )
     await queue.set_status(job_id, status="done", progress_pct=100)
     return {"job_id": job_id, "output": str(out_path)}

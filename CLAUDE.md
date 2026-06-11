@@ -113,9 +113,11 @@ directly. `/generate` and `/stylize` remain as direct entrypoints.
 
 ## Known gotchas / failure modes
 
-- **Stylization is slow** (~16 min for a 42s 720p clip): it extracts every frame to PNG on
-  disk and runs multi-pass PIL filters. Known bottleneck; optimize via an in-memory ffmpeg
-  pipe before relying on it at scale. `--workers N` helps a little.
+- **Stylization** streams raw RGB frames between two ffmpeg subprocesses (no PNG/disk),
+  sketches across **threads** (PIL/numpy release the GIL — process pools lose to per-frame
+  IPC here), and caps output at 30fps (`max_fps`). A 42s 720p/60fps clip went 16min → ~3min.
+  The filter itself is tuned (numpy 3x3 dilation instead of PIL `MaxFilter`; in-place 0..255
+  blend). Don't reintroduce per-frame PNG round-trips or a `ProcessPoolExecutor` over frames.
 - **`claude_cli` is slow (~10–120s/call) and costs tokens.** It runs in the worker (a job),
   never synchronously in a request. Don't call it from a request handler.
 - **Stop the backend before heavy local work isn't needed here** (Redis is local/disposable),

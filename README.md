@@ -152,12 +152,12 @@ intake, the LLM auto-router, per-pipeline skills, and still-image output.
 
 **Deferred** (see [`docs/product-plan.md`](docs/product-plan.md)): overlay-mode **annotations**
 (detect key moments → draw arrows/callouts on stylized footage), **style learning** (distill a
-user's old animations into a reusable style), brand kits, TTS narration, and **stylization
-performance** (in-memory ffmpeg pipe — currently the main bottleneck on long clips).
+user's old animations into a reusable style), brand kits, and TTS narration.
 
 ## Notes
 
-- Stylizing long videos is currently slow (every frame is extracted to disk + filtered); short
-  clips are fine. Optimization is the top deferred item.
+- **Stylization is fast** now: frames stream through ffmpeg in memory (no PNG/disk), sketch
+  across threads, and cap at 30fps — a 42s 720p/60fps clip went **~16min → ~3min**. Trim with
+  `--seconds N` for an even quicker highlight.
 - Downloaded source clips and full stylized outputs are git-ignored — keep third-party footage
   local and respect its rights.

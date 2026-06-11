@@ -35,6 +35,7 @@ class Settings(BaseSettings):
     max_upload_image_mb: int = 10
     max_upload_video_mb: int = 200
     max_video_seconds: int = 45        # cap stylization work per the overlay-mode design
+    stylize_workers: int = 4           # parallel frame workers for video stylization
 
     @property
     def max_upload_video_bytes(self) -> int:
