@@ -24,3 +24,8 @@ data/
 .idea/
 .DS_Store
 Thumbs.db
+
+# Internal / non-code (kept local, not pushed)
+CLAUDE.md
+demo_spec.json
+docs/
