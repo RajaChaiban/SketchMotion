@@ -92,6 +92,7 @@ uv run python -m worker.stylize in.mp4 out.mp4 --style pencil --seconds 12 --wor
 | POST | `/create` | unified intake — options in, agent routes, returns `{job_id, route, output_kind, style}` |
 | POST | `/generate` | direct: prompt (+ image) → animated video |
 | POST | `/stylize` | direct: video → sketched video |
+| POST | `/annotate` | composite timestamped sketch annotations (circle/arrow/callout/caption) on a video |
 | GET | `/jobs/{id}` | status `{status, progress_pct, route, output_kind, error?}` |
 | GET | `/jobs/{id}/video` · `/image` | the finished MP4 / PNG |
 | GET | `/jobs/{id}/spec` | the compiled `SceneSpec` (debug) |
@@ -148,11 +149,12 @@ survives stylization.
 ## Status & roadmap
 
 **Built:** generate (prompt → video), stylize (video/image → sketch), the unified `/create`
-intake, the LLM auto-router, per-pipeline skills, and still-image output.
+intake, the LLM auto-router, per-pipeline skills, still-image output, and **overlay
+annotations** (composite timestamped circle/arrow/callout/caption sketches on a video).
 
-**Deferred** (see [`docs/product-plan.md`](docs/product-plan.md)): overlay-mode **annotations**
-(detect key moments → draw arrows/callouts on stylized footage), **style learning** (distill a
-user's old animations into a reusable style), brand kits, and TTS narration.
+**Deferred** (see [`docs/product-plan.md`](docs/product-plan.md)): overlay **auto-detection**
+(an LLM/video model finds the key moments and emits the annotation spec automatically), **style
+learning** (distill a user's old animations into a reusable style), brand kits, and TTS narration.
 
 ## Notes
 

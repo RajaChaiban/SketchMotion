@@ -171,6 +171,44 @@ async def stylize(
     return GenerateResponse(job_id=job_id, status="queued")
 
 
+@app.post("/annotate", response_model=GenerateResponse)
+@limiter.limit("10/minute")
+async def annotate(
+    request: Request,
+    annotations: str = Form(...),
+    video: UploadFile = File(...),
+    settings: Settings = Depends(get_settings),
+    queue: JobQueue = Depends(get_queue),
+) -> GenerateResponse:
+    """Composite sketch annotations (timestamped) onto an uploaded video."""
+    import json
+
+    from worker.overlay_spec import validate_overlay_spec
+
+    if not (video.content_type or "").startswith("video/"):
+        raise HTTPException(status_code=422, detail="uploaded file is not a video")
+    try:
+        ann_list = json.loads(annotations)
+        # validate annotation geometry/timing/coverage now (resolution-independent)
+        validate_overlay_spec({"source_fps": 30, "source_resolution": [1, 1], "annotations": ann_list})
+    except Exception as e:  # noqa: BLE001
+        raise HTTPException(status_code=422, detail=f"invalid annotations: {e}")
+
+    data = await video.read()
+    if len(data) > settings.max_upload_video_bytes:
+        raise HTTPException(status_code=422, detail=f"video exceeds {settings.max_upload_video_mb} MB")
+
+    job_id = uuid.uuid4().hex
+    dest = Path(settings.output_dir) / UPLOAD_SUBDIR / f"{job_id}_src"
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    async with aiofiles.open(dest, "wb") as fh:
+        await fh.write(data)
+
+    await queue.enqueue("annotate_job", {"job_id": job_id, "video_path": str(dest),
+                                         "annotations": ann_list}, job_id)
+    return GenerateResponse(job_id=job_id, status="queued")
+
+
 def _sniff_kind(data: bytes, content_type: str | None) -> str | None:
     ct = content_type or ""
     if ct.startswith("image/"):

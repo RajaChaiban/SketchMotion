@@ -135,6 +135,33 @@ async def intake_job(ctx: dict, payload: dict) -> dict[str, Any]:
         return {"job_id": job_id, "error": str(e)}
 
 
+async def annotate_job(ctx: dict, payload: dict) -> dict[str, Any]:
+    """Overlay mode (non-LLM): composite sketch annotations onto a base video."""
+    from worker.overlay import composite_annotations
+    from worker.overlay_spec import validate_overlay_spec
+    from worker.video_ingest import probe
+
+    queue = JobQueue(ctx["redis"])
+    settings = get_settings()
+    job_id = payload["job_id"]
+    try:
+        await queue.set_status(job_id, status="rendering", progress_pct=5)
+        base = payload["video_path"]
+        info = await asyncio.to_thread(probe, base)
+        spec = validate_overlay_spec({
+            "source_fps": info["fps"],
+            "source_resolution": [info["width"], info["height"]],
+            "annotations": payload.get("annotations", []),
+        })
+        out_path = Path(settings.output_dir) / f"{job_id}.mp4"
+        await asyncio.to_thread(composite_annotations, base, spec, out_path)
+        await queue.set_status(job_id, status="done", progress_pct=100)
+        return {"job_id": job_id, "output": str(out_path)}
+    except Exception as e:  # noqa: BLE001
+        await queue.set_status(job_id, status="failed", error=f"{type(e).__name__}: {e}")
+        return {"job_id": job_id, "error": str(e)}
+
+
 class WorkerSettings:
-    functions = [generate_job, stylize_job, stylize_image_job, intake_job]
+    functions = [generate_job, stylize_job, stylize_image_job, intake_job, annotate_job]
     redis_settings = RedisSettings.from_dsn(get_settings().redis_url)

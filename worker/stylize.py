@@ -60,7 +60,8 @@ def _encode_proc(output_path: Path, w: int, h: int, fps: float,
         if max_seconds:
             cmd += ["-t", str(max_seconds)]
         cmd += ["-i", str(src), "-map", "0:v:0", "-map", "1:a:0", "-c:a", "aac", "-shortest"]
-    cmd += ["-c:v", "libx264", "-pix_fmt", "yuv420p", "-crf", "20", str(output_path)]
+    cmd += ["-c:v", "libx264", "-preset", "veryfast", "-pix_fmt", "yuv420p", "-crf", "21",
+            str(output_path)]
     return subprocess.Popen(cmd, stdin=subprocess.PIPE, stderr=subprocess.DEVNULL)
 
 

@@ -79,6 +79,16 @@ in-place 0..255 color blend, no /255 round-trips).
 ### 3.3 Stylize image (image → sketch still) — `worker/stylize.py::stylize_image`
 One frame through the same `sketchify` filter → PNG, served at `/jobs/{id}/image`.
 
+### 3.4 Overlay annotations (video + annotations → annotated video) — `worker/overlay.py`
+The non-LLM half of overlay mode. An **`OverlaySpec`** (`worker/overlay_spec.py`) carries up to
+40 timestamped, normalized-anchor `Annotation`s (circle/arrow/callout/caption/box/underline/
+sprite/progress-bar). `render/overlay_engine.py` draws each active annotation onto a transparent
+RGBA layer (hand-drawn strokes, `draw_on`/`pop`/`fade` easing); `composite_annotations` streams
+the base video through the raw-RGB pipe and alpha-blends overlays **only on frames inside an
+annotation window** (everything else passes through). Guardrails: anchors clamped to frame,
+≤40 annotations, ≤30% coverage at any instant. The LLM half (auto-detect key moments → emit the
+spec) is the remaining deferred piece.
+
 ---
 
 ## 4. Ingestion & the auto-router
@@ -188,6 +198,7 @@ the worker advances it. Tests inject a `FakeQueue` via `dependency_overrides` �
 | POST | `/create` | unified intake (options → agent/route → job) |
 | POST | `/generate` | direct animate |
 | POST | `/stylize` | direct video stylize |
+| POST | `/annotate` | composite timestamped sketch annotations on a video |
 | GET | `/jobs/{id}` | status (+ `route`, `output_kind`) |
 | GET | `/jobs/{id}/video` · `/image` | output (MP4 / PNG) |
 | GET | `/jobs/{id}/spec` | compiled `SceneSpec` (debug) |
@@ -219,8 +230,7 @@ input+option; audio survives stylization. Opt-in live markers: `live` (Gemini), 
 
 ## 12. Deferred (see `docs/product-plan.md`)
 
-Overlay-mode **annotations** (LLM detects key moments → composite arrows/callouts on
-stylized frames), style-learning (distill a user's old animations into a reusable style
-skill), brand kits, and TTS narration. *(Video-stylization performance is now handled — see
-§3.2; further gains would come from segment-parallel multiprocessing to beat the GIL ceiling,
-or GPU/`cv2` filters.)*
+Overlay-mode **auto-detection** (an LLM/video model detects key moments → *emits* the
+`OverlaySpec` that §3.4 already composites), style-learning (distill a user's old animations
+into a reusable style skill), brand kits, and TTS narration. *(Video-stylization performance is
+now handled — see §3.2; the annotation compositing itself is built — see §3.4.)*

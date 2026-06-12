@@ -149,6 +149,29 @@ async def test_create_explicit_animate_routes_direct(client, fake_queue):
     assert fake_queue.enqueued[0]["prompt"] == "a recap"
 
 
+async def test_annotate_enqueues(client, fake_queue):
+    import json
+    anns = json.dumps([
+        {"type": "circle_highlight", "t_start": 1.0, "t_end": 2.0, "anchor": [0.4, 0.4, 0.2, 0.2]},
+        {"type": "writeon_caption", "t_start": 1.0, "t_end": 3.0, "anchor": [0.1, 0.8, 0.8, 0.1],
+         "params": {"text": "GAME WINNER"}},
+    ])
+    files = {"video": ("clip.mp4", io.BytesIO(b"\x00\x00\x00\x18ftypmp42" + b"0" * 64), "video/mp4")}
+    r = await client.post("/annotate", data={"annotations": anns}, files=files)
+    assert r.status_code == 200
+    assert fake_queue.enqueued[0]["function"] == "annotate_job"
+    assert len(fake_queue.enqueued[0]["annotations"]) == 2
+
+
+async def test_annotate_rejects_bad_geometry(client):
+    import json
+    anns = json.dumps([{"type": "box_outline", "t_start": 1.0, "t_end": 2.0, "anchor": [0.9, 0.4, 0.5, 0.2]}])
+    files = {"video": ("clip.mp4", io.BytesIO(b"\x00\x00\x00\x18ftypmp42"), "video/mp4")}
+    r = await client.post("/annotate", data={"annotations": anns}, files=files)
+    assert r.status_code == 422
+    assert "annotations" in r.json()["detail"]
+
+
 async def test_create_explicit_stylize_video_routes_direct(client, fake_queue):
     files = {"file": ("clip.mp4", io.BytesIO(b"\x00\x00\x00\x18ftypmp42" + b"0" * 64), "video/mp4")}
     r = await client.post("/create", data={"mode": "stylize", "style": "ink"}, files=files)

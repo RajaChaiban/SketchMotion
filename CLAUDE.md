@@ -96,11 +96,13 @@ directly. `/generate` and `/stylize` remain as direct entrypoints.
   `decide()` + safe fallback), `llm.py` (provider layer + factory), `gemini_client.py`
   (Gemini calls + `stub_compile`), `spec.py` (`SceneSpec` + validators), `refine.py`
   (passthrough + content screen), `skills.py` (skill loader + style presets),
-  `stylize.py` (`stylize_video`/`stylize_image`), `video_ingest.py` (ffprobe + frame extract).
+  `stylize.py` (`stylize_video`/`stylize_image`), `video_ingest.py` (ffprobe + frame extract),
+  `overlay.py` (`composite_annotations`), `overlay_spec.py` (`OverlaySpec`/`Annotation`).
 - **Render (`render/`):** `primitives.py` (jitter strokes, sprites, basketball/hoop,
   confetti, easings), `engine.py` (`SceneSpec` dict → frames → ffmpeg; `SCENE_HANDLERS`,
   `clean_text`, safe-zone captions), `sketch_filter.py` (`sketchify` ink/pencil),
-  `palette.py`, `fonts.py`. Pure, deterministic, no Redis/LLM.
+  `overlay_engine.py` (annotation drawers → RGBA), `palette.py`, `fonts.py`. Pure,
+  deterministic, no Redis/LLM.
 - **Skills (`skills/`):** `prompt-refiner/SKILL.md` (animate), `video-stylist/SKILL.md`
   (stylize). Loaded by `worker/skills.py`; injected where the agent decides.
 
